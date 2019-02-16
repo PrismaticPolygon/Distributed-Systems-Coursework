@@ -1,7 +1,5 @@
-import Pyro4
+import requests
 
-uri = input("What is the Pyro uri of the greeting object? ").strip()
-name = input("What is your name? ").strip()
+r = requests.get("http://localhost:9000/bar")
 
-greeting_maker = Pyro4.Proxy(uri)
-print(greeting_maker.get_fortunate(name))
+print(r)
