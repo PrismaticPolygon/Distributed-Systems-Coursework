@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 
-python server.py &
-python client.py
+source ./venv/Scripts/activate
+
+python frontend.py &
+python server.pyc

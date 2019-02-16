@@ -1,22 +1,106 @@
 import Pyro4
 import pandas as pd
-import time
+import os
+import socket
+import random
+import sys
 
-path = "./database/ratings.csv"
+# Oh, I do that outside. I'm registering the class itself. That logic should therefore be in the front-end.
+# Or we have an object-within-an-object. The server handles the bad stuff.
 
-ratings = pd.read_csv(path, index_col=["userId", "movieId"])
+# I'm surprised that there are multiple front-ends shown.
+# Two types of operation: query (read-only) and updates (write-only)
+# From an implementation perspective? Pass a list of name-servers?
+# We'll have to inverse the current relationship, which... shouldn't be impossible.
+# With that, they can periodically call methods on each other.
+# May as well be after receiving request.s
+
+WORKERNAME = "Worker_%d@%s" % (os.getpid(), socket.gethostname())
+statuses = ["ACTIVE", "OVERLOADED", "OFFLINE"]
+
+# Maintain update log
+# "Each front end". Why are there multiple? Keeps a vector timestamp that reflects the version of the latest data
+# values accessed by the front end (and therefore client).
+# FE sends this in every request message to a replica manager, together with query or update.
+
 
 @Pyro4.expose
-class GreetingMaker(object):
+class Server(object):
 
-    def get_fortunate(self, name):
+    path = "./database/ratings.csv"
+    ratings = pd.read_csv(path)
 
-        return "Hello, {}. Here is your fortune message:\nBehold the warranty --  the bold print giveth and the fine " \
-               "print giveth away".format(name)
+    def get_rating(self, movie_id):
+
+        return self.ratings.loc[self.ratings["movieId"] == movie_id]["rating"].mean().round()
+
+    def get_status(self):
+
+        return random.choice(statuses)
 
 
 daemon = Pyro4.Daemon()
-uri = daemon.register(GreetingMaker)
+uri = daemon.register(Server())
+
+dispatcher = Pyro4.core.Proxy("PYRONAME:example.distributed.dispatcher")
+dispatcher.add_server(uri)
+
+# Okay. Now I can query the dispatcher for server URIs, and then send it directly.
+# Or perhaps every server ought to maintain a list... Yeah, I like that. This is not as OO as I'd like.
+
+daemon.requestLoop()
+
+# So how do I get my URI out? I can look it up, if I know my object name
+
+# And these are all in different threads. So there's no problem having it like this.
+
+# def process(item):
+#
+#     print("Processing: ", item)
+#
+#     return 0
+#
+#
+# def main():
+#
+#     dispatcher = Pyro4.core.Proxy("PYRONAME:example.distributed.dispatcher")
+#
+#     print("This is worker %s" % WORKERNAME)
+#     print("getting work from dispatcher")
+#
+#     while True:
+#
+#         try:
+#
+#             item = dispatcher.getWork()
+#
+#         except ValueError:
+#
+#             print("No work available")
+#
+#         else:
+#
+#             process(item)
+#             dispatcher.putResult(item)
+#
+#
+# if __name__ == "__main__":
+#
+#     main()
+
+# On creation...
+
+# @Pyro4.expose
+# class GreetingMaker(object):
+#
+#     def get_fortunate(self, name):
+#
+#         return "Hello, {}. Here is your fortune message:\nBehold the warranty --  the bold print giveth and the fine " \
+#                "print giveth away".format(name)
+#
+#
+# daemon = Pyro4.Daemon()
+# uri = daemon.register(GreetingMaker)
 
 # print("Ready. Object uri = ", uri)
 # daemon.requestLoop()
@@ -31,38 +115,12 @@ uri = daemon.register(GreetingMaker)
 
 # Maybe I should just java this.
 
-print(ratings)
+# Am I being stupid? Maybe have no index? Yeah.
 
-# Ugh.
+# Okay! Nice. Now, I can have multiple ones of these.
 
-def submit_rating(user_id, movie_id, rating):
+# Now make this a Pyro object...
 
-    # It already gets complicated! I need a nice simple Pythonic SQL
-
-    rating = pd.Series([rating, time.time()], name=user_id)
-
-    ratings.append(rating)
-
-    print(ratings)
-
-    # ratings.to_csv()
-
-
-def update_rating(user_id, movie_id, rating):
-
-    print(user_id, movie_id, rating)
-
-    # This will basically call the previous one, having removed
-    # the specified rating.
-
-def get_ratings(movie_id):
-
-    print(movie_id)
-
-# For now, I suggest that we use pandas. It's pretty easy.
-
-
-submit_rating("userId", "movieId", "5")
 
 
 # Create object instances
