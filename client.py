@@ -1,4 +1,5 @@
 import Pyro4
+from frontend import Method
 
 dispatcher = Pyro4.core.Proxy("PYRONAME:example.distributed.dispatcher")
 
@@ -6,8 +7,10 @@ dispatcher = Pyro4.core.Proxy("PYRONAME:example.distributed.dispatcher")
 # Then the front-end is effectively a DNS server, but methods can't be called on it.
 # It should be in the dispatcher class. I can specify the names, after all.
 
+# CREATE, READ, UPDATE, DELETE
+
 item = {
-    "method": "CREATE",
+    "method": Method.CREATE,
     "rating": {
         "userId": 1,
         "movieId:": 1,

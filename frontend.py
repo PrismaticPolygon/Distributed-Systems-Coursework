@@ -2,6 +2,8 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import Pyro4
 import queue
+import uuid
+from enum import Enum
 
 HOST_NAME = 'localhost'
 PORT_NUMBER = 9000
@@ -35,6 +37,7 @@ PORT_NUMBER = 9000
 # Multi-cast delivers requests to all the Rs in the same (total) order
 
 # But it's neither of these. It's gossip architecture.
+# So there is some st
 
 
 @Pyro4.expose
@@ -42,6 +45,16 @@ PORT_NUMBER = 9000
 class DispatcherQueue(object):
 
     servers = []
+
+    prev = {}
+    # Reflects the version of the latest data values accessed by the FE. Contains an entry for every RM. Sent by the FE
+    # in every request message to an RM, together with a description of the query or update operation itself. When a RM
+    # returns a value as the result of a query operation, it supplies a new vector timestamp, since the RMs may be been
+    # updated since the last operation. Each update operation returns a vector timestamp that is unique to the update;
+    # each returned timestamp is merged with the FE's previous timestamp to record the version of the replicated data
+    # observed by the client.
+
+
 
     # So now the dispatcher knows that it has at least one worker. And so: it can question them.
     # So now it gets complicated, and I have to put in some fancy logic. For now: can I start
@@ -52,15 +65,52 @@ class DispatcherQueue(object):
         print("URI added:", self.servers)
 
     def __init__(self):
+
         self.workqueue = queue.Queue()
         self.resultqueue = queue.Queue()
 
-    def putWork(self, item):
+    # Then we may as well have different... no.
+    # We'll just ask for a type (e.g. Method.CREATE)
 
-        # So when we're given work... Put it in a queue?
-        # Normally sends requests to a single RM at a time. If the one it normally uses is unreachable..
+    def putWork(self, request):
 
-        self.workqueue.put(item)
+        # So we have our name server
+
+        # This is more like an HTTP request, anywhere
+
+        operation = {
+            "id": uuid.uuid4(),
+            "prev": self.prev,
+            "op": {
+                "request": request
+            }
+        }
+
+        # Should contain type and parameters
+        # Likely redundant
+
+        if request.method is Method.READ:
+
+            operation["op"]["type"] = Operation.QUERY
+
+        else:
+
+            operation["op"]["type"] = Operation.UPDATE
+
+        # Send operation to an available server an available server
+
+        response = {
+            "value": "",
+            "label": {}
+        }
+
+        if operation["type"] is Operation.QUERY:
+
+            self.prev = response["label"]
+
+        else:
+
+            return response["value"]
 
     def getWork(self, timeout=5):
         try:
@@ -69,7 +119,16 @@ class DispatcherQueue(object):
             raise ValueError("no items in queue")
 
     def putResult(self, item):
-        self.resultqueue.put(item)
+
+        # Item contains a result and a set of operations
+        # Label identifies the updates whose execution must proceed the execution of o.
+        labels = item.label
+        value = item.value
+
+        # Each label is a vector timestamp. So why is it a set of them?
+
+
+        self.resultqueue.put(item.result)
 
     def getResult(self, timeout=5):
         try:
@@ -99,7 +158,16 @@ print("Serving simple")
 # The key insight is that the front-end is also a Pyro object.
 
 
+class Method(Enum):
+    CREATE = 0
+    READ = 1
+    UPDATE = 2
+    DELETE = 3
 
+
+class Operation(Enum):
+    QUERY = Enum.auto()
+    UPDATE = Enum.auto()
 
 
 
