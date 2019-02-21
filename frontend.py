@@ -56,9 +56,6 @@ class DispatcherQueue(object):
 
 
 
-    # So now the dispatcher knows that it has at least one worker. And so: it can question them.
-    # So now it gets complicated, and I have to put in some fancy logic. For now: can I start
-
     def add_server(self, uri):
 
         self.servers.append(uri)
