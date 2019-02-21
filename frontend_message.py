@@ -1,4 +1,4 @@
-from server import Operation
+from replica import Operation
 import uuid
 
 

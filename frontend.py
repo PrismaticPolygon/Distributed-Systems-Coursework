@@ -3,7 +3,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import Pyro4
 import queue
 import uuid
+from enums import ReplicaStatus
 from enum import Enum
+
+# And when I import it runs! That's dumb.
+# Solution is probably a static.
 
 HOST_NAME = 'localhost'
 PORT_NUMBER = 9000
@@ -42,7 +46,7 @@ PORT_NUMBER = 9000
 
 @Pyro4.expose
 @Pyro4.behavior(instance_mode="single")
-class DispatcherQueue(object):
+class Frontend(object):
 
     servers = []
 
@@ -54,26 +58,48 @@ class DispatcherQueue(object):
     # each returned timestamp is merged with the FE's previous timestamp to record the version of the replicated data
     # observed by the client.
 
+    def get_replica(self):
 
+        print("Getting replica...")
 
-    def add_server(self, uri):
+        ns = Pyro4.locateNS()
 
-        self.servers.append(uri)
-        print("URI added:", self.servers)
+        replicas = ns.list(metadata_all={"resource:replica"})
 
-    def __init__(self):
+        print("Found replicas", replicas, end="\n\n")
 
-        self.workqueue = queue.Queue()
-        self.resultqueue = queue.Queue()
+        overloaded = None
 
-    # Then we may as well have different... no.
-    # We'll just ask for a type (e.g. Method.CREATE)
+        for (name, uri) in replicas.items():
 
-    def putWork(self, request):
+            replica: 'Replica' = Pyro4.Proxy(uri)
+            status: ReplicaStatus = replica.get_status()
 
-        # So we have our name server
+            print(name + " reporting status:", status)
 
-        # This is more like an HTTP request, anywhere
+            # That's weird...
+
+            if status is ReplicaStatus.ACTIVE:
+
+                print("\nReturning % (%)", name, status)
+
+                return replica
+
+            elif status is ReplicaStatus.OVERLOADED:
+
+                print("Saving as overloaded")
+
+                overloaded = (name, uri, status, replica)
+
+        if overloaded is not None:
+
+            print("\nReturning % (%)", overloaded[0], overloaded[2])
+
+            return overloaded[3]
+
+        raise ConnectionRefusedError("All replicas offline")
+
+    def request(self, request):
 
         operation = {
             "id": uuid.uuid4(),
@@ -109,11 +135,8 @@ class DispatcherQueue(object):
 
             return response["value"]
 
-    def getWork(self, timeout=5):
-        try:
-            return self.workqueue.get(block=True, timeout=timeout)
-        except queue.Empty:
-            raise ValueError("no items in queue")
+
+
 
     def putResult(self, item):
 
@@ -127,32 +150,25 @@ class DispatcherQueue(object):
 
         self.resultqueue.put(item.result)
 
-    def getResult(self, timeout=5):
-        try:
-            return self.resultqueue.get(block=True, timeout=timeout)
-        except queue.Empty:
-            raise ValueError("no result available")
 
-    def workQueueSize(self):
-        return self.workqueue.qsize()
+print("Creating frontend...")
 
-    def resultQueueSize(self):
-        return self.resultqueue.qsize()
+# That's very strange...
+
+daemon = Pyro4.Daemon()
+ns = Pyro4.locateNS()
+frontend = Frontend()
+
+uri = daemon.register(frontend)
+
+print("Frontend created at", uri, end="\n\n")
+
+ns.register("frontend", uri, metadata={"resource:frontend"})
 
 
-Pyro4.Daemon.serveSimple({
-    DispatcherQueue: "example.distributed.dispatcher",
-})
+frontend.get_replica()
 
-# Running on the same port! Interesting. And, of course, we can just extend that to three.
-
-# Right. This blocks!
-# But we can set up multiple processes here, and set their names. That way, the dispatcher can know what the other
-# ones will be called,
-
-print("Serving simple")
-
-# The key insight is that the front-end is also a Pyro object.
+# daemon.requestLoop()
 
 
 class Method(Enum):
@@ -163,54 +179,8 @@ class Method(Enum):
 
 
 class Operation(Enum):
-    QUERY = Enum.auto()
-    UPDATE = Enum.auto()
-
-
-
-
-
-# This connects with the proxies.
-# Could use sockets or events instead of a main request loop.
-
-# Ah, Pyro does it for me!
-
-class MyHandler(BaseHTTPRequestHandler):
-
-    def do_HEAD(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-
-    def do_GET(self):
-
-        paths = {
-            '/foo': {'status': 200},
-            '/bar': {'status': 302},
-            '/baz': {'status': 404},
-            '/qux': {'status': 500}
-        }
-
-        if self.path in paths:
-            self.respond(paths[self.path])
-        else:
-            self.respond({'status': 500})
-
-    def handle_http(self, status_code, path):
-        self.send_response(status_code)
-        self.send_header('Content-type', 'text/html')
-        self.end_headers()
-        content = '''
-        <html><head><title>Title goes here.</title></head>
-        <body><p>This is a test.</p>
-        <p>You accessed path: {}</p>
-        </body></html>
-        '''.format(path)
-        return bytes(content, 'UTF-8')
-
-    def respond(self, opts):
-        response = self.handle_http(opts['status'], self.path)
-        self.wfile.write(response)
+    QUERY = 0
+    UPDATE = 1
 
 
 # if __name__ == '__main__':

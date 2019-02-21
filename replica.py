@@ -1,11 +1,8 @@
-import os
 import queue
 import random
-import socket
 import sqlite3
-import uuid
 import time
-from enum import Enum
+from enums import ReplicaStatus
 from typing import List, Any
 
 import Pyro4
@@ -15,18 +12,16 @@ from gossip_message import GossipMessage
 from log import Log
 from timestamp import Timestamp
 
-WORKERNAME = "Worker_%d@%s" % (os.getpid(), socket.gethostname())
-
 
 @Pyro4.expose
-class Server(object):
+class Replica(object):
+
+    connection = sqlite3.connect("./database/movies.db")
+    cursor = connection.cursor()
 
     def __init__(self, id):
 
         self.id = id
-
-    connection = sqlite3.connect("./database/movies.db")
-    cursor = connection.cursor()
 
     def create(self, user_id, movie_id, rating) -> None:
 
@@ -201,9 +196,9 @@ class Server(object):
         # Aha! So: sort them in order of all the replica managers, right? Any update which... has ANY component greater than
         # those now held in the log...? Mayhaps let's leave the gossip stuff until tomorrow?
 
-    def get_status(self):
+    def get_status(self) -> ReplicaStatus:
 
-        return random.choice(ReplicaManagerStatus)
+        return ReplicaStatus.random
 
     def merge_logs(self, log):
 
@@ -216,42 +211,16 @@ class Server(object):
                 self.update_log.append(record)
 
 
+print("Creating replica...")
+
 daemon = Pyro4.Daemon()
 ns = Pyro4.locateNS()
-server = Server(ns.count() - 1)
+server = Replica(ns.count() - 1)
 
 uri = daemon.register(server)
-ns.register("server_" + str(server.id), uri, metadata={"resource:replica"})
+
+print("Replica created at", uri)
+
+ns.register("replica_" + str(server.id), uri, metadata={"resource:replica"})
 
 daemon.requestLoop()
-
-# Excellent. Hey: this is pretty cool.
-
-class ReplicaManagerStatus(Enum):
-    ACTIVE = 0
-    OVERLOADED = 1
-    OFFLINE = 2
-
-
-
-
-
-    # Create object instances
-    # Give names to those instances, and register them with the name server
-    # Tell Pyro to take care of those instances
-    # Tell Pyro to sit idle in a loop waiting for incoming method calls
-
-    # The way I see it: I'm missing the distributor in the middle.
-
-    # What's the best way to query?
-    # We can switch to a mongoDB database later, I think. It rather defeats the purpose otherwise, right?
-    # Each one would need their own database. Which, in fact, is not crazy.
-    # Main should create the objects, name then, and assign them to particular names.
-
-    # Each server needs to be able to arbitrarily report itself as active, overloaded, of ffline.
-    # I think it's intended that I run these three, right? Is that possible?
-
-    # At least three servers should be implemented"
-    # Ah. So my front-end acts as this service-broker, essentially. B
-    # So I have my client program, a front-end server , and then my replications servers
-    # That's irrelevant for now. Let's just make the program/
