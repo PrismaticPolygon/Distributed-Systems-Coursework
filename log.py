@@ -1,5 +1,5 @@
-from timestamp import Timestamp
 from operation import Operation
+from timestamp import Timestamp
 
 
 class Log:

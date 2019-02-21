@@ -1,54 +1,20 @@
-import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import Pyro4
-import queue
 import uuid
-from enums import ReplicaStatus
-from enum import Enum
 
-# And when I import it runs! That's dumb.
-# Solution is probably a static.
+import Pyro4
 
-HOST_NAME = 'localhost'
-PORT_NUMBER = 9000
+from enums import ReplicaStatus, Operation, Method
+from replica import Replica
 
-# It blocks, though.
-# Needs to be in a separate... thing.
-# A replicat
-#
-# daemon = Pyro4.Daemon()
-# uri = daemon.register(Server())
-#
-# print("Ready. Object uri = ", uri)
-# daemon.requestLoop()
-
-# Server creates one or more instances and registers them with the Pyro Name Server
-# Queries the name server for the location of those objects. Gets a URI for the,
-# Perfect, found an example.
-# Ah. I've got it the wrong way around, it seems.
-# So it's not the RCs being called by the front-end, it's the front-end being called by the RCs.
-# Oh.. wait. So long as they're registered with the name server, I don't have to do jack!
-# This sounds like my solution.
-
-# FE receives request.
-# FE forwards it to R(s)
-# R(s) accept request and decide ordering relative to other requests
-# R(s) process request
-# R(s) reach consensus
-# R(s) reply to FE; FE processes response, then returns it to client
-
-# FE attaches unique id and uses TOTALLY ORDERED RELIABLE MULTICAST to send requests. It does not issue requests in parallel
-# Multi-cast delivers requests to all the Rs in the same (total) order
-
-# But it's neither of these. It's gossip architecture.
-# So there is some st
+# TODO: fix race condition on replica creation
 
 
 @Pyro4.expose
 @Pyro4.behavior(instance_mode="single")
 class Frontend(object):
 
-    servers = []
+    replicas = {}
+    # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
+    # rather than every operation an FE performs.
 
     prev = {}
     # Reflects the version of the latest data values accessed by the FE. Contains an entry for every RM. Sent by the FE
@@ -58,42 +24,38 @@ class Frontend(object):
     # each returned timestamp is merged with the FE's previous timestamp to record the version of the replicated data
     # observed by the client.
 
-    def get_replica(self):
+    def add_replica(self, name, uri) -> None:
 
-        print("Getting replica...")
+        print("Replica added", (name, uri))
 
-        ns = Pyro4.locateNS()
+        self.replicas[name] = uri
 
-        replicas = ns.list(metadata_all={"resource:replica"})
+    def get_replica(self) -> Replica:
 
-        print("Found replicas", replicas, end="\n\n")
+        print("Getting replica... ", end="")
 
         overloaded = None
 
-        for (name, uri) in replicas.items():
+        for (name, uri) in self.replicas.items():
 
-            replica: 'Replica' = Pyro4.Proxy(uri)
-            status: ReplicaStatus = replica.get_status()
+            replica: Replica = Pyro4.Proxy(uri)
+            status: ReplicaStatus = ReplicaStatus(replica.get_status())
 
             print(name + " reporting status:", status)
 
-            # That's weird...
-
             if status is ReplicaStatus.ACTIVE:
 
-                print("\nReturning % (%)", name, status)
+                print("\nReturning {0} ({1})".format(name, status))
 
                 return replica
 
             elif status is ReplicaStatus.OVERLOADED:
 
-                print("Saving as overloaded")
-
                 overloaded = (name, uri, status, replica)
 
         if overloaded is not None:
 
-            print("\nReturning % (%)", overloaded[0], overloaded[2])
+            print("\nReturning {0} ({1})".format(overloaded[0], overloaded[2]))
 
             return overloaded[3]
 
@@ -101,7 +63,9 @@ class Frontend(object):
 
     def request(self, request):
 
-        operation = {
+        print("Request received:", request)
+
+        query = {
             "id": uuid.uuid4(),
             "prev": self.prev,
             "op": {
@@ -109,25 +73,21 @@ class Frontend(object):
             }
         }
 
-        # Should contain type and parameters
-        # Likely redundant
+        replica: Replica = self.get_replica()
+        response = None
 
         if request.method is Method.READ:
 
-            operation["op"]["type"] = Operation.QUERY
+            query["op"]["type"] = Operation.QUERY
+
+            response = replica.query(query)
 
         else:
 
-            operation["op"]["type"] = Operation.UPDATE
+            query["op"]["type"] = Operation.UPDATE
+            replica.update(query)
 
-        # Send operation to an available server an available server
-
-        response = {
-            "value": "",
-            "label": {}
-        }
-
-        if operation["type"] is Operation.QUERY:
+        if query["type"] is Operation.UPDATE:
 
             self.prev = response["label"]
 
@@ -136,100 +96,18 @@ class Frontend(object):
             return response["value"]
 
 
+if __name__ == '__main__':
 
+    print("Creating frontend...")
 
-    def putResult(self, item):
+    daemon = Pyro4.Daemon()
+    ns = Pyro4.locateNS()
+    frontend = Frontend()
 
-        # Item contains a result and a set of operations
-        # Label identifies the updates whose execution must proceed the execution of o.
-        labels = item.label
-        value = item.value
+    uri = daemon.register(frontend)
 
-        # Each label is a vector timestamp. So why is it a set of them?
+    print("Frontend created at", uri, end="\n\n")
 
+    ns.register("frontend", uri, metadata={"resource:frontend"})
 
-        self.resultqueue.put(item.result)
-
-
-print("Creating frontend...")
-
-# That's very strange...
-
-daemon = Pyro4.Daemon()
-ns = Pyro4.locateNS()
-frontend = Frontend()
-
-uri = daemon.register(frontend)
-
-print("Frontend created at", uri, end="\n\n")
-
-ns.register("frontend", uri, metadata={"resource:frontend"})
-
-
-frontend.get_replica()
-
-# daemon.requestLoop()
-
-
-class Method(Enum):
-    CREATE = 0
-    READ = 1
-    UPDATE = 2
-    DELETE = 3
-
-
-class Operation(Enum):
-    QUERY = 0
-    UPDATE = 1
-
-
-# if __name__ == '__main__':
-#
-#     server_class = HTTPServer
-#     httpd = server_class((HOST_NAME, PORT_NUMBER), MyHandler)
-#     print(time.asctime(), 'Server Starts - %s:%s' % (HOST_NAME, PORT_NUMBER))
-#     try:
-#         httpd.serve_forever()
-#     except KeyboardInterrupt:
-#         pass
-#     httpd.server_close()
-#     print(time.asctime(), 'Server Stops - %s:%s' % (HOST_NAME, PORT_NUMBER))
-
-# Based on https://gist.github.com/Integralist/ce5ebb37390ab0ae56c9e6e80128fdc2
-
-# import Pyro4
-#
-# uri = input("What is the Pyro uri of the greeting object? ").strip()
-# name = input("What is your name? ").strip()
-#
-# greeting_maker = Pyro4.Proxy(uri)
-# print(greeting_maker.get_fortunate(name))
-
-## Front-end maintains a central list of all replication servers and decides accordingly.
-# This means that each server will need a status.
-
-# THis is the middleware. It handles remote calls, object invocation, and messages.
-# From a user perspective, it hides the implementation details and distributed nature.
-# Uses RPC: executes a remote function without the programmer coding the network communication.
-# I shouldn't have to worry about timings. A client-side stub marshalls args, generates ID, starts timer
-# then sends a message.
-
-# the server-side stub unmarshalls, records ID, calls the remote function, marshalls, sets timer,
-# and returns to the client.
-
-# Location transparency cannot be facilitated.
-# Let's start with the easy bits: the functions to retrieve, submit, and update movie ratings.
-
-# Ask whether an RM is available. If it is send it off.
-
-# The replica managers sends new postings to other RMs
-# Causal update ordering, forced ordering, and immediate.
-
-# Immediate-ordered updates are applied in a consistent order relative to any other update at all replica managers.
-# Updates purely modify the state.
-
-# Front-end normally sends requests to a single RM at a time. However, it will communicate with another if the
-# one is normally uses in fails or becomes unreachable
-
-# Isn't the daemon request loop() somewhat blocking?
-# So: three servers and a front-end server! let's get that hosted first... hmm?
+    daemon.requestLoop()

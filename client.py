@@ -1,4 +1,5 @@
 import Pyro4
+
 from frontend import Method
 
 dispatcher = Pyro4.core.Proxy("PYRONAME:example.distributed.dispatcher")

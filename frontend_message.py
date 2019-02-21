@@ -1,5 +1,6 @@
-from replica import Operation
 import uuid
+
+from operation import Operation
 
 
 class FrontEndMessage:

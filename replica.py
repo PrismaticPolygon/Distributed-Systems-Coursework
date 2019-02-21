@@ -1,12 +1,13 @@
 import queue
-import random
 import sqlite3
 import time
-from enums import ReplicaStatus
+import uuid
+# from frontend import Frontend
 from typing import List, Any
 
 import Pyro4
 
+from enums import ReplicaStatus
 # from frontend_message import FrontEndMessage
 from gossip_message import GossipMessage
 from log import Log
@@ -19,23 +20,23 @@ class Replica(object):
     connection = sqlite3.connect("./database/movies.db")
     cursor = connection.cursor()
 
-    def __init__(self, id):
+    def __init__(self):
 
-        self.id = id
+        self.id = uuid.uuid4()
 
-    def create(self, user_id, movie_id, rating) -> None:
+    def create_db(self, user_id, movie_id, rating) -> None:
 
         self.cursor.execute("INSERT INTO ratings VALUES (%, %, %, %)".format(user_id, movie_id, rating, time.time()))
 
         self.connection.commit()
 
-    def read(self, movie_id: str) -> int:
+    def read_db(self, movie_id: str) -> int:
 
         self.cursor.execute("SELECT ROUND(AVG(rating)) FROM ratings WHERE movieId=?", (movie_id,))
 
         return self.cursor.fetchone()[0]
 
-    def update(self, movie_id, user_id, rating) -> None:
+    def update_db(self, movie_id, user_id, rating) -> None:
 
         self.cursor.execute("UPDATE ratings SET rating=? WHERE (movieID=? AND userId=?)", (rating, movie_id, user_id,))
 
@@ -175,6 +176,8 @@ class Replica(object):
 
     def chat_shit(self):
 
+        ns = Pyro4.locateNS()
+
         replicas = ns.list(metadata_all={"resource:replica"})
 
         print("Chatting shit to: ", replicas)
@@ -211,16 +214,25 @@ class Replica(object):
                 self.update_log.append(record)
 
 
-print("Creating replica...")
+if __name__ == '__main__':
 
-daemon = Pyro4.Daemon()
-ns = Pyro4.locateNS()
-server = Replica(ns.count() - 1)
+    print("Creating replica...")
 
-uri = daemon.register(server)
+    daemon = Pyro4.Daemon()
+    ns = Pyro4.locateNS()
+    replica = Replica()
 
-print("Replica created at", uri)
+    uri = daemon.register(replica)
+    name = "replica-" + str(replica.id)
+    ns.register(name, uri, metadata={"resource:replica"})
 
-ns.register("replica_" + str(server.id), uri, metadata={"resource:replica"})
+    print("Replica created at", uri, end="\n\n")
 
-daemon.requestLoop()
+    frontends = ns.list(metadata_all={"resource:frontend"})
+
+    for (fe_name, fe_uri) in frontends.items():
+
+        frontend = Pyro4.Proxy(fe_uri)
+        frontend.add_replica(name, uri)
+
+    daemon.requestLoop()

@@ -1,5 +1,5 @@
-from enum import Enum
 import random
+from enum import Enum
 
 
 class EnumProperty(object):
@@ -23,8 +23,20 @@ class EnumProperty(object):
 class ReplicaStatus(Enum):
     ACTIVE = "ACTIVE"
     OVERLOADED = "OVERLOADED"
-    OFFLINE = "OFFLINE"
+    # OFFLINE = "OFFLINE"
 
     @EnumProperty
     def random(self):
-        return random.choice(self.__members__)
+        return random.choice(list(self.__members__.values()))
+
+
+class Method(Enum):
+    CREATE = 0
+    READ = 1
+    UPDATE = 2
+    DELETE = 3
+
+
+class Operation(Enum):
+    QUERY = 0
+    UPDATE = 1
