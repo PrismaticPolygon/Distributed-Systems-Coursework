@@ -1,5 +1,5 @@
-from operation import Operation
-from timestamp import Timestamp
+from enums import Operation
+from requests import Timestamp
 
 
 class Log:

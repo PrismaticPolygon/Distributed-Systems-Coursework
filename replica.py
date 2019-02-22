@@ -6,13 +6,11 @@ import uuid
 from typing import List, Any
 
 import Pyro4
-from requests import ClientRequest, FrontendRequest, ReplicaResponse
+from requests import ClientRequest, FrontendRequest, Timestamp, ReplicaResponse
 
 from enums import Status, Method
 # from frontend_message import FrontEndMessage
-from gossip_message import GossipMessage
 from log import Log
-from timestamp import Timestamp
 
 
 @Pyro4.expose
@@ -208,7 +206,7 @@ class Replica(object):
 
         return True
 
-    def gossip(self, gossip: GossipMessage):
+    def gossip(self, gossip):
 
         print("Gossip received from an RM")
 

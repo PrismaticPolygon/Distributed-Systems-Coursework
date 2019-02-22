@@ -1,11 +1,86 @@
 from enums import Method, Operation
-from timestamp import Timestamp
 from typing import Dict, Any
 from Pyro4.util import SerializerBase
 import Pyro4
 import uuid
 
 Pyro4.config.SERIALIZER = "serpent"
+
+
+class Timestamp:
+
+    def __init__(self, replicas=None):
+
+        if replicas is None:
+
+            replicas = dict()
+
+        self.replicas: Dict[int, int] = replicas
+
+    def set(self, i: int, value: int) -> None:
+
+        self.replicas[i] = value
+
+    def add(self):
+
+        self.replicas[self.size()] = 0
+
+    def increment(self, id: int) -> None:
+
+        self.replicas[id] += 1
+
+    def get(self, i: int) -> int:
+
+        return self.replicas[i]
+
+    def size(self) -> int:
+
+        return len(self.replicas)
+
+    def compare_timestamps(self, prev: 'Timestamp') -> bool:
+
+        print("Comparing timestamps: ", self.replicas, prev)
+
+        assert (prev.size() == self.size())
+
+        for i in range(self.size()):
+
+            if prev.get(i) > self.get(i):
+
+                return False
+
+        return True
+
+    def merge_timestamps(self, ts: 'Timestamp') -> None:
+
+        print("Merging timestamps: ", self.replicas, ts)
+
+        assert(ts.size() == self.size())
+
+        for x in range(len(self.replicas)):
+
+            if ts.get(x) > self.replicas.get(x):
+
+                self.replicas[x] = ts.get(x)
+
+
+def timestamp_to_dict(timestamp: Timestamp) -> Dict:
+
+    print("Serialising timestamp")
+
+    return {
+        "__class__": "FrontendRequest",
+        "replicas": timestamp.replicas
+    }
+
+
+def dict_to_timestamp(classname: str, timestamp: Dict) -> Timestamp:
+
+    print("Deserialising frontend request:", timestamp)
+
+    return Timestamp(
+        timestamp["replicas"]
+    )
 
 
 class ClientRequest:
@@ -16,17 +91,18 @@ class ClientRequest:
         self.params = params
 
 
-def serialise_client_request(client_request: ClientRequest):
+def client_request_to_dict(client_request: ClientRequest):
 
     print("Serialising client request")
 
     return {
+        "__class__": "ClientRequest",
         "method": client_request.method,
         "params": client_request.params
     }
 
 
-def deserialise_client_request(client_request: Dict):
+def dict_to_client_request(classname: str, client_request: Dict) -> ClientRequest:
 
     print("Deserialising client request")
 
@@ -34,14 +110,6 @@ def deserialise_client_request(client_request: Dict):
         Method(client_request["method"]),
         client_request["params"]
     )
-
-
-class ReplicaResponse:
-
-    def __init__(self, value: Any, label: Timestamp):
-
-        self.value = value
-        self.label = label
 
 
 class FrontendRequest:
@@ -61,34 +129,46 @@ class FrontendRequest:
         self.operation = operation
 
 
-def serialise_frontend_request(frontend_request: FrontendRequest) -> Dict:
+def frontend_request_to_dict(frontend_request: FrontendRequest) -> Dict:
 
     print("Serialising frontend request")
 
     return {
+        "__class__": "FrontendRequest",
         "id": str(frontend_request.id),
-        "prev": frontend_request.prev,
-        "request": frontend_request.request,
+        "prev": timestamp_to_dict(frontend_request.prev),
+        "request": client_request_to_dict(frontend_request.request),
         "operation": frontend_request.operation
     }
 
 
-def deserialise_frontend_request(frontend_request: Dict) -> FrontendRequest:
+def dict_to_frontend_request(classname: str, frontend_request: Dict) -> FrontendRequest:
 
-    print("Deserialising frontend request")
+    print("Deserialising frontend request:", frontend_request)
 
     return FrontendRequest(
-        Timestamp(**frontend_request["prev"]),
-        ClientRequest(**frontend_request["request"]),
+        dict_to_timestamp("Timestamp", frontend_request["prev"]),
+        dict_to_client_request("ClientRequest", frontend_request["request"]),
         Operation(frontend_request["operation"]),
         frontend_request["id"]
     )
 
 
+class ReplicaResponse:
+
+    def __init__(self, value: Any, label: Timestamp):
+
+        self.value = value
+        self.label = label
+
+
 print("Registering serialiser hooks")
 
-SerializerBase.register_class_to_dict(ClientRequest, serialise_client_request)
-SerializerBase.register_dict_to_class("ClientRequest", deserialise_client_request)
+SerializerBase.register_class_to_dict(ClientRequest, client_request_to_dict)
+SerializerBase.register_dict_to_class("ClientRequest", dict_to_client_request)
 
-SerializerBase.register_class_to_dict(FrontendRequest, serialise_frontend_request)
-SerializerBase.register_dict_to_class("FrontendRequest", deserialise_frontend_request)
+SerializerBase.register_class_to_dict(FrontendRequest, frontend_request_to_dict)
+SerializerBase.register_dict_to_class("FrontendRequest", dict_to_frontend_request)
+
+SerializerBase.register_class_to_dict(Timestamp, timestamp_to_dict)
+SerializerBase.register_dict_to_class("Timestamp", dict_to_timestamp)

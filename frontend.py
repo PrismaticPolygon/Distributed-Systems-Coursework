@@ -4,8 +4,7 @@ import Pyro4
 
 from enums import Status, Operation, Method
 from replica import Replica
-from timestamp import Timestamp
-from requests import ClientRequest, FrontendRequest, ReplicaResponse
+from requests import ClientRequest, FrontendRequest, ReplicaResponse, Timestamp
 
 
 @Pyro4.behavior(instance_mode="single")
