@@ -16,6 +16,10 @@ class Timestamp:
 
         self.replicas[i] = value
 
+    def add(self):
+
+        self.replicas[self.size()] = 0
+
     def increment(self, id: int) -> None:
 
         self.replicas[id] += 1

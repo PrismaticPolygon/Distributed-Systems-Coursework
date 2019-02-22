@@ -31,9 +31,9 @@ class Status(Enum):
 
 
 class Method(Enum):
-    CREATE = 0
-    READ = 1
-    UPDATE = 2
+    CREATE = "CREATE"
+    READ = "READ"
+    UPDATE = "UPDATE"
 
 
 class Operation(Enum):

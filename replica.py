@@ -6,6 +6,7 @@ import uuid
 from typing import List, Any
 
 import Pyro4
+from requests import ClientRequest, FrontendRequest, ReplicaResponse
 
 from enums import Status, Method
 # from frontend_message import FrontEndMessage
@@ -99,15 +100,18 @@ class Replica(object):
 
     # Querys and
 
-    def query(self, query: Any):
+    def query(self, query: FrontendRequest) -> ReplicaResponse:
 
-        print("Received query", query, end="...\n")
+        # It may as well be here, right?
+        # We can re-factor later if that makes more sensee.
 
-        operation = query["op"]
-        prev = query["prev"]    # The previous timestamp
-        request = operation["request"]  # The request passed to the FE
-        method: Method = Method(request["method"])  # The method passed to the client
-        params = request["params"]
+        print("Received query from FE", query, end="...\n")
+
+        operation = query.operation
+        prev = query.prev    # The previous timestamp
+        request = operation.request  # The request passed to the FE
+        method: Method = request.method  # The method passed to the client
+        params = request.params
 
         if method == Method.CREATE:
 
@@ -154,20 +158,31 @@ class Replica(object):
             # This returns... the value of the actual query, and the label itself.
             # Ah, so we don't even need multiple methods! Nice.
 
-    def update(self, update: Any) -> None:
+    def update(self, update: Any) -> FrontendRequest:
+
+        # Hasn't been deserialised properly.
+        # Time to make an object!
 
         # Let's get at least ONE of these working. Current block is the Operation class.
 
-        print("Update received from FE")
+        print("Received update from FE", update, end="...\n")
 
-        if self.compare_timestamps(update.prev):
+        operation = update["op"]
+        id = update["id"]
+        prev = update["prev"]  # The previous timestamp
+        request = operation["request"]  # The request passed to the FE
+        method: Method = Method(request["method"])  # The method passed to the client
+        params = request["params"]
+
+        if self.compare_timestamps(prev):
 
             # Condition ensures that all the updates on which this update depends have already been applied.
             # If not met: check again when gossip messages arrive.
 
             # How do I check the update_log? Ah. Check whether the created log is already there?
 
-            if update.id not in self.executed_operation_table:
+            if id not in self.executed_operation_table:
+
                 self.replica_timestamp.increment(self.id)
 
                 ts = update.prev.copy()

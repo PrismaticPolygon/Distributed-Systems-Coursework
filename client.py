@@ -1,32 +1,8 @@
 import Pyro4
-# Get a front-end.
-import time
-import curses
-from frontend import Frontend
-from request import Request
+from requests import ClientRequest
 from enums import Method
-import uuid
-# from curses import wrapper
-#
-#
-# def main(stdscr):
-#
-#     # Clear screen
-#     stdscr.clear()
-#
-#     # This raises ZeroDivisionError when i == 10.
-#     for i in range(0, 11):
-#         v = i - 10
-#         stdscr.addstr(i, 0, '10 divided by {} is {}'.format(v, 10 / v))
-#
-#     stdscr.refresh()
-#     stdscr.getkey()
 
-
-# So how do I want to call? Operations are create, read, and update.
-
-# Because it's in main I guess?
-# I'm not doing everything as goddamn dicts!
+# Okay! What's the next step? Let's get isolated CRUD operations working!
 
 if __name__ == "__main__":
 
@@ -47,77 +23,34 @@ if __name__ == "__main__":
 
         with Pyro4.Proxy(uri) as frontend:
 
-            request = {
-                "method": Method.READ,
-                "params": {
-                    "movie_id": 1
-                }
-            }
+            params = {}
+            method = None
 
-            operation = input("Please enter an operation: (READ): ")
+            while True:
 
-            response = frontend.request(request)
+                operation = input("Please enter an operation: (CREATE/READ/UPDATE): ").strip()
+                params["movie_id"] = input("Please enter a movie ID: ").strip()
 
-            print(response)
+                if operation == "CREATE":
 
+                    method = Method.CREATE
+                    params["rating"] = input("Please enter a rating: ").strip()
+                    params["user_id"] = 1
 
+                elif operation == "READ":
 
-    # if operation == "READ":
+                    method = Method.READ
 
+                elif operation == "UPDATE":
 
-    # screen = curses.initscr()
-    #
-    # curses.noecho()
-    # curses.cbreak()
-    #
-    # screen.keypad(True)
-    #
-    # screen.clear()
-    #
-    # time.sleep(3)
-    #
-    # # Reverse settings above and close process
-    # curses.nocbreak()
-    # screen.keypad(False)
-    # curses.echo()
-    # curses.endwin()
+                    method = Method.UPDATE
+                    params["rating_id"] = input("Please enter a rating ID: ").strip()
+                    params["user_id"] = 1
 
+                request = ClientRequest(method, params)
 
+                print("Sending request", request)
 
+                response = frontend.request(request)
 
-# from frontend import Method
-
-# dispatcher = Pyro4.core.Proxy("PYRONAME:example.distributed.dispatcher")
-
-# WE'll use CRUD operations for this one.
-# Then the front-end is effectively a DNS server, but methods can't be called on it.
-# It should be in the dispatcher class. I can specify the names, after all.
-
-# CREATE, READ, UPDATE, DELETE
-
-# item = {
-#     "method": Method.CREATE,
-#     "rating": {
-#         "userId": 1,
-#         "movieId:": 1,
-#         "rating": 4.0
-#     }
-# }
-
-
-
-
-# dispatcher.putWork(item)
-
-# This really will be that simple. We'll want to rate-test it, eventually.
-
-
-
-# Distinction is not as clear as I'd like by half. On the other hand: I'm just
-
-# So I place work on the dispatcher, I suppose with the standard get/put/requests.
-# But how will my gossip architecture work? It requires that the workers know of each other's existences .
-# Which means that this simplistic example is unsuitable.
-
-# So should this call a Pyro object?
-# Or should it send an HTTP request? It may as well be the former: that's a lot easier.
+                print(response)

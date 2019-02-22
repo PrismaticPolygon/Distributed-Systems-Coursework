@@ -4,8 +4,9 @@ import Pyro4
 
 from enums import Status, Operation, Method
 from replica import Replica
+from timestamp import Timestamp
+from requests import ClientRequest, FrontendRequest, ReplicaResponse
 
-# TODO: fix race condition on replica creation
 
 @Pyro4.behavior(instance_mode="single")
 class Frontend(object):
@@ -14,17 +15,17 @@ class Frontend(object):
 
         self.id = uuid.uuid4()
 
-    replicas = {}
-    # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
-    # rather than every operation an FE performs.
+        # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
+        # rather than every operation an FE performs.
+        self.replicas = dict()
 
-    prev = {}
-    # Reflects the version of the latest data values accessed by the FE. Contains an entry for every RM. Sent by the FE
-    # in every request message to an RM, together with a description of the query or update operation itself. When a RM
-    # returns a value as the result of a query operation, it supplies a new vector timestamp, since the RMs may be been
-    # updated since the last operation. Each update operation returns a vector timestamp that is unique to the update;
-    # each returned timestamp is merged with the FE's previous timestamp to record the version of the replicated data
-    # observed by the client.
+        # Reflects the version of the latest data values accessed by the FE. Contains an entry for every RM. Sent by the
+        # FE in every request message to an RM, together with a description of the query or update operation itself.
+        # When a RM returns a value as the result of a query operation, it supplies a new vector timestamp, since the
+        # RMs may be been updated since the last operation. Each update operation returns a vector timestamp that is
+        # unique to the update; each returned timestamp is merged with the FE's previous timestamp to record the version
+        # of the replicated data observed by the client.
+        self.prev = Timestamp()
 
     @Pyro4.expose
     def add_replica(self, name, uri) -> None:
@@ -32,6 +33,7 @@ class Frontend(object):
         print("Replica added", (name, uri))
 
         self.replicas[name] = uri
+        self.prev.add()
 
     def get_replica(self) -> Replica:
 
@@ -44,11 +46,11 @@ class Frontend(object):
             replica: Replica = Pyro4.Proxy(uri)
             status: Status = Status(replica.get_status())
 
-            print(name + " reporting status:", status)
+            print(name + " reporting status:", status, end="...\n")
 
             if status is Status.ACTIVE:
 
-                print("\nUsing {0} ({1})".format(name, status), end="\n\n")
+                print("Using {0} ({1})".format(name, status), end="\n\n")
 
                 return replica
 
@@ -58,50 +60,45 @@ class Frontend(object):
 
         if overloaded is not None:
 
-            print("\nUsing {0} ({1})".format(overloaded[0], overloaded[2]), end="\n\n")
+            print("Using {0} ({1})".format(overloaded[0], overloaded[2]), end="\n\n")
 
             return overloaded[3]
 
         raise ConnectionRefusedError("All replicas offline")
 
     @Pyro4.expose
-    def request(self, request):
+    def request(self, request: ClientRequest):
 
-        print("\nRequest received:", request)
+        print("\nRequest received:", request, type(request))
 
-        query = {
-            "id": uuid.uuid4(),
-            "prev": self.prev,
-            "op": {
-                "request": request
-            }
-        }
+        # It's being received as a dict here. But why?
+
+        # Has no "thing" method. Hmm...
+        # Right? This is a dict.
 
         replica: Replica = self.get_replica()
-        response = None
 
-        if Method(request["method"]) is Method.READ:
+        # It's going wrong HERE1
 
-            query["op"]["type"] = Operation.QUERY
+        # This is wrong
 
-            response = replica.query(query)
+        if request.method is Method.READ:
+
+            query: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
+
+            response: ReplicaResponse = replica.query(query)
 
         else:
 
-            query["op"]["type"] = Operation.UPDATE
-            replica.update(query)
+            update: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
+
+            response: ReplicaResponse = replica.update(update)
 
         print(response)
 
-        if query["op"]["type"] is Operation.UPDATE:
+        self.prev = response.label
 
-            self.prev = response["label"]
-
-        else:
-
-            return response["value"]
-
-        return response["value"]
+        return response.value
 
 
 if __name__ == '__main__':
