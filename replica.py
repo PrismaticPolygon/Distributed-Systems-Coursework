@@ -7,7 +7,7 @@ from typing import List, Any
 
 import Pyro4
 
-from enums import ReplicaStatus
+from enums import Status, Method
 # from frontend_message import FrontEndMessage
 from gossip_message import GossipMessage
 from log import Log
@@ -17,30 +17,45 @@ from timestamp import Timestamp
 @Pyro4.expose
 class Replica(object):
 
-    connection = sqlite3.connect("./database/movies.db")
-    cursor = connection.cursor()
-
     def __init__(self):
 
         self.id = uuid.uuid4()
 
     def create_db(self, user_id, movie_id, rating) -> None:
 
-        self.cursor.execute("INSERT INTO ratings VALUES (%, %, %, %)".format(user_id, movie_id, rating, time.time()))
+        connection = sqlite3.connect("./database/ratings.db")
 
-        self.connection.commit()
+        cursor = connection.cursor()
 
-    def read_db(self, movie_id: str) -> int:
+        cursor.execute("INSERT INTO ratings VALUES (%, %, %, %)".format(user_id, movie_id, rating, time.time()))
 
-        self.cursor.execute("SELECT ROUND(AVG(rating)) FROM ratings WHERE movieId=?", (movie_id,))
+        connection.commit()
 
-        return self.cursor.fetchone()[0]
+    def read_db(self, movie_id: str) -> float:
+
+        connection = sqlite3.connect("./database/ratings.db")
+
+        cursor = connection.cursor()
+
+        print("Getting rating for {0}...".format(movie_id))
+
+        cursor.execute("SELECT ROUND(AVG(rating)) FROM ratings WHERE movieId=?", (movie_id, ))
+
+        rating = cursor.fetchone()[0]
+
+        print("Calculated", rating, end="...\n")
+
+        return rating
 
     def update_db(self, movie_id, user_id, rating) -> None:
 
-        self.cursor.execute("UPDATE ratings SET rating=? WHERE (movieID=? AND userId=?)", (rating, movie_id, user_id,))
+        connection = sqlite3.connect("./database/ratings.db")
 
-        self.connection.commit()
+        cursor = self.connection.cursor()
+
+        cursor.execute("UPDATE ratings SET rating=? WHERE (movieID=? AND userId=?)", (rating, movie_id, user_id,))
+
+        connection.commit()
 
     # The value of the application state as maintained by the RM. Each RM is a state machine, which begins with a
     # specified initial value and is thereafter solely the result of applying update operations to that state.
@@ -82,25 +97,48 @@ class Replica(object):
     hold_back: queue.Queue = queue.Queue()
     id: int = 1
 
+    # Querys and
+
     def query(self, query: Any):
 
-        operation = query.operation
-        prev = query.prev
+        print("Received query", query, end="...\n")
 
-        if self.compare_timestamps(prev):
+        operation = query["op"]
+        prev = query["prev"]    # The previous timestamp
+        request = operation["request"]  # The request passed to the FE
+        method: Method = Method(request["method"])  # The method passed to the client
+        params = request["params"]
 
-            print("Applying operation")
+        if method == Method.CREATE:
 
-            return {
-                "value": "",  # Result of operation
-                "label": self.value_timestamp
-            }
+            value = self.create_db(**params), prev
+
+        elif method == Method.READ:
+
+            value = self.read_db(**params), prev
+
+        elif method == Method.UPDATE:
+
+            value = self.update_db(**params), prev
 
         else:
 
-            self.hold_back.put(query)  # Might want a block or a timeout
+            value = "Lol"
 
-            print("Putting in hold-back queue")  # So when is this queue updated?
+        result = {
+            "value": value[0],  # Result of operation
+            "label": self.value_timestamp
+        }
+
+        print("Returning", result, end="\n\n")
+
+        return result
+
+        # else:
+
+            # self.hold_back.put(query)  # Might want a block or a timeout
+
+            # print("Putting in hold-back queue")  # So when is this queue updated?
 
             # Either waits for the missing updates, or requests the updates from the RMs concerned.
 
@@ -199,9 +237,9 @@ class Replica(object):
         # Aha! So: sort them in order of all the replica managers, right? Any update which... has ANY component greater than
         # those now held in the log...? Mayhaps let's leave the gossip stuff until tomorrow?
 
-    def get_status(self) -> ReplicaStatus:
+    def get_status(self) -> Status:
 
-        return ReplicaStatus.random
+        return Status.random
 
     def merge_logs(self, log):
 

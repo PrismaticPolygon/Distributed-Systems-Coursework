@@ -2,15 +2,17 @@ import uuid
 
 import Pyro4
 
-from enums import ReplicaStatus, Operation, Method
+from enums import Status, Operation, Method
 from replica import Replica
 
 # TODO: fix race condition on replica creation
 
-
-@Pyro4.expose
 @Pyro4.behavior(instance_mode="single")
 class Frontend(object):
+
+    def __init__(self):
+
+        self.id = uuid.uuid4()
 
     replicas = {}
     # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
@@ -24,6 +26,7 @@ class Frontend(object):
     # each returned timestamp is merged with the FE's previous timestamp to record the version of the replicated data
     # observed by the client.
 
+    @Pyro4.expose
     def add_replica(self, name, uri) -> None:
 
         print("Replica added", (name, uri))
@@ -32,38 +35,39 @@ class Frontend(object):
 
     def get_replica(self) -> Replica:
 
-        print("Getting replica... ", end="")
+        print("Getting replica... ")
 
         overloaded = None
 
         for (name, uri) in self.replicas.items():
 
             replica: Replica = Pyro4.Proxy(uri)
-            status: ReplicaStatus = ReplicaStatus(replica.get_status())
+            status: Status = Status(replica.get_status())
 
             print(name + " reporting status:", status)
 
-            if status is ReplicaStatus.ACTIVE:
+            if status is Status.ACTIVE:
 
-                print("\nReturning {0} ({1})".format(name, status))
+                print("\nUsing {0} ({1})".format(name, status), end="\n\n")
 
                 return replica
 
-            elif status is ReplicaStatus.OVERLOADED:
+            elif status is Status.OVERLOADED:
 
                 overloaded = (name, uri, status, replica)
 
         if overloaded is not None:
 
-            print("\nReturning {0} ({1})".format(overloaded[0], overloaded[2]))
+            print("\nUsing {0} ({1})".format(overloaded[0], overloaded[2]), end="\n\n")
 
             return overloaded[3]
 
         raise ConnectionRefusedError("All replicas offline")
 
+    @Pyro4.expose
     def request(self, request):
 
-        print("Request received:", request)
+        print("\nRequest received:", request)
 
         query = {
             "id": uuid.uuid4(),
@@ -76,7 +80,7 @@ class Frontend(object):
         replica: Replica = self.get_replica()
         response = None
 
-        if request.method is Method.READ:
+        if Method(request["method"]) is Method.READ:
 
             query["op"]["type"] = Operation.QUERY
 
@@ -87,13 +91,17 @@ class Frontend(object):
             query["op"]["type"] = Operation.UPDATE
             replica.update(query)
 
-        if query["type"] is Operation.UPDATE:
+        print(response)
+
+        if query["op"]["type"] is Operation.UPDATE:
 
             self.prev = response["label"]
 
         else:
 
             return response["value"]
+
+        return response["value"]
 
 
 if __name__ == '__main__':
@@ -108,6 +116,6 @@ if __name__ == '__main__':
 
     print("Frontend created at", uri, end="\n\n")
 
-    ns.register("frontend", uri, metadata={"resource:frontend"})
+    ns.register("frontend-" + str(frontend.id), uri, metadata={"resource:frontend"})
 
     daemon.requestLoop()

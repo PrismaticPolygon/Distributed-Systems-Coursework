@@ -1,9 +1,16 @@
 from typing import Dict
+import Pyro4.util
 
 
 class Timestamp:
 
-    replicas: Dict[int, int] = []
+    def __init__(self, replicas=None):
+
+        if replicas is None:
+
+            replicas = dict()
+
+        self.replicas: Dict[int, int] = replicas
 
     def set(self, i: int, value: int) -> None:
 
@@ -46,3 +53,7 @@ class Timestamp:
             if ts.get(x) > self.replicas.get(x):
 
                 self.replicas[x] = ts.get(x)
+
+
+Pyro4.util.SerializerBase.register_class_to_dict(Timestamp, lambda x: {"replicas": x.replicas})
+Pyro4.util.SerializerBase.register_dict_to_class(Timestamp, lambda x: Timestamp(x["replicas"]))

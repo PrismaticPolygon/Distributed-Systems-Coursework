@@ -20,7 +20,7 @@ class EnumProperty(object):
         raise AttributeError("can't delete pseudo-member %r" % self.name)
 
 
-class ReplicaStatus(Enum):
+class Status(Enum):
     ACTIVE = "ACTIVE"
     OVERLOADED = "OVERLOADED"
     # OFFLINE = "OFFLINE"
@@ -34,7 +34,6 @@ class Method(Enum):
     CREATE = 0
     READ = 1
     UPDATE = 2
-    DELETE = 3
 
 
 class Operation(Enum):
