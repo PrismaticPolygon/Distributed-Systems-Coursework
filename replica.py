@@ -105,9 +105,8 @@ class Replica(object):
 
         print("Received query from FE", query, end="...\n")
 
-        operation = query.operation
         prev = query.prev    # The previous timestamp
-        request = operation.request  # The request passed to the FE
+        request = query.request  # The request passed to the FE
         method: Method = request.method  # The method passed to the client
         params = request.params
 
@@ -127,10 +126,7 @@ class Replica(object):
 
             value = "Lol"
 
-        result = {
-            "value": value[0],  # Result of operation
-            "label": self.value_timestamp
-        }
+        result = ReplicaResponse(value[0], self.value_timestamp)
 
         print("Returning", result, end="\n\n")
 

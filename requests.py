@@ -160,7 +160,24 @@ class ReplicaResponse:
 
         self.value = value
         self.label = label
-
+        
+        
+def replica_response_to_dict(replica_response: ReplicaResponse):
+    
+    return {
+        "__class__": "ReplicaResponse",
+        "value": replica_response.value,
+        "label": timestamp_to_dict(replica_response.label)
+    }
+    
+def dict_to_replica_response(classname: str, replica_response: Dict):
+    
+    return ReplicaResponse(
+        replica_response["value"],
+        dict_to_timestamp("Timestamp", replica_response["label"])
+    )
+    
+    
 
 print("Registering serialiser hooks")
 
@@ -172,3 +189,7 @@ SerializerBase.register_dict_to_class("FrontendRequest", dict_to_frontend_reques
 
 SerializerBase.register_class_to_dict(Timestamp, timestamp_to_dict)
 SerializerBase.register_dict_to_class("Timestamp", dict_to_timestamp)
+
+SerializerBase.register_class_to_dict(ReplicaResponse, replica_response_to_dict)
+SerializerBase.register_dict_to_class("ReplicaResponse", dict_to_replica_response)
+

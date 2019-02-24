@@ -83,11 +83,15 @@ class Frontend(object):
 
         if request.method is Method.READ:
 
+            print("Sending query...")
+
             query: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
 
             response: ReplicaResponse = replica.query(query)
 
         else:
+
+            print("Sending update...")
 
             update: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
 
