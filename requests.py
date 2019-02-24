@@ -7,6 +7,10 @@ import uuid
 Pyro4.config.SERIALIZER = "serpent"
 
 
+class StabilityError(Exception):
+    pass
+
+
 class Timestamp:
 
     def __init__(self, replicas=None):
@@ -15,21 +19,60 @@ class Timestamp:
 
             replicas = dict()
 
-        self.replicas: Dict[int, int] = replicas
+        self.replicas: Dict[str, int] = replicas
+        self.frontend_updates = 0
 
-    def set(self, i: int, value: int) -> None:
+    def __str__(self):
+
+        return str(self.replicas)
+
+    def __le__(self, other: 'Timestamp') -> bool:
+
+        for (id, value) in self.replicas.items():
+
+            if other.get(id) is not None:
+
+                if value > other.get(id):
+
+                    return False
+
+        return True
+
+    def __lt__(self, other: 'Timestamp') -> bool:
+
+        for (id, value) in self.replicas.items():
+
+            if other.get(id) is not None:
+
+                if value >= other.get(id):
+
+                    return False
+
+        return True
+
+    def __eq__(self, other) -> bool:
+
+        for (id, value) in self.replicas.items():
+
+            if other.get(id) != value:
+
+                return False
+
+        return True
+
+    def set(self, i: str, value: int) -> None:
 
         self.replicas[i] = value
 
-    def add(self):
+    def add(self, id: str):
 
-        self.replicas[self.size()] = 0
+        self.replicas[id] = 0
 
-    def increment(self, id: int) -> None:
+    def increment(self, id: str) -> None:
 
         self.replicas[id] += 1
 
-    def get(self, i: int) -> int:
+    def get(self, i: str) -> int:
 
         return self.replicas[i]
 
@@ -37,31 +80,17 @@ class Timestamp:
 
         return len(self.replicas)
 
-    def compare_timestamps(self, prev: 'Timestamp') -> bool:
+    def copy(self) -> 'Timestamp':
 
-        print("Comparing timestamps: ", self.replicas, prev)
+        return Timestamp(self.replicas.copy())
 
-        assert (prev.size() == self.size())
+    def merge(self, ts: 'Timestamp') -> None:
 
-        for i in range(self.size()):
+        for (id, value) in self.replicas.items():
 
-            if prev.get(i) > self.get(i):
+            if ts.get(id) > self.replicas.get(id):
 
-                return False
-
-        return True
-
-    def merge_timestamps(self, ts: 'Timestamp') -> None:
-
-        print("Merging timestamps: ", self.replicas, ts)
-
-        assert(ts.size() == self.size())
-
-        for x in range(len(self.replicas)):
-
-            if ts.get(x) > self.replicas.get(x):
-
-                self.replicas[x] = ts.get(x)
+                self.replicas[id] = ts.get(id)
 
 
 def timestamp_to_dict(timestamp: Timestamp) -> Dict:
@@ -89,6 +118,13 @@ class ClientRequest:
 
         self.method = method
         self.params = params
+
+    def __str__(self):
+
+        return {
+            "method": self.method,
+            "params": self.params
+        }
 
 
 def client_request_to_dict(client_request: ClientRequest):
@@ -127,6 +163,15 @@ class FrontendRequest:
         self.prev = prev
         self.request = request
         self.operation = operation
+
+    def __str__(self):
+
+        return {
+            "prev": str(self.prev),
+            "request": str(self.request),
+            "operation": str(self.operation),
+            "id": str(self.id)
+        }
 
 
 def frontend_request_to_dict(frontend_request: FrontendRequest) -> Dict:
