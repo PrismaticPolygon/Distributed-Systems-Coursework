@@ -27,12 +27,12 @@ class Frontend(object):
         self.prev = Timestamp()
 
     @Pyro4.expose
-    def add_replica(self, name, uri) -> None:
+    def add_replica(self, name, uri, id) -> None:
 
         print("Replica added", (name, uri))
 
         self.replicas[name] = uri
-        self.prev.add()
+        self.prev.add(id)
 
     def get_replica(self) -> Replica:
 
@@ -65,21 +65,16 @@ class Frontend(object):
 
         raise ConnectionRefusedError("All replicas offline")
 
+    # They're not the same size because we don't KNOW how big it ought to be
+    # That implies fore-knowledge of the number of replicas.
+    # For now I can fix the method, but we'll keep it in mind...
+
     @Pyro4.expose
     def request(self, request: ClientRequest):
 
         print("\nRequest received:", request, type(request))
 
-        # It's being received as a dict here. But why?
-
-        # Has no "thing" method. Hmm...
-        # Right? This is a dict.
-
         replica: Replica = self.get_replica()
-
-        # It's going wrong HERE1
-
-        # This is wrong
 
         if request.method is Method.READ:
 
@@ -93,7 +88,7 @@ class Frontend(object):
 
             print("Sending update...")
 
-            update: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
+            update: FrontendRequest = FrontendRequest(self.prev, request, Operation.UPDATE)
 
             response: ReplicaResponse = replica.update(update)
 
@@ -102,6 +97,10 @@ class Frontend(object):
         self.prev = response.label
 
         return response.value
+
+    def handle_replica_response(self, response: ReplicaResponse):
+
+        print("Handling replica response...")
 
 
 if __name__ == '__main__':

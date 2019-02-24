@@ -1,17 +1,16 @@
 import queue
-import sqlite3
-import time
 import uuid
-# from frontend import Frontend
 from typing import List, Any
+from db import DB
 
 import Pyro4
-from requests import ClientRequest, FrontendRequest, Timestamp, ReplicaResponse
+from requests import ClientRequest, FrontendRequest, Timestamp, ReplicaResponse, StabilityError
 
 from enums import Status, Method
-# from frontend_message import FrontEndMessage
-from log import Log
+from record import Record, Log
 
+# That was silly of me. I could just store it in an integer. OR: add the front-ends to the replica timestamp.
+# But it's from multiple front-ends: better, I just store the
 
 @Pyro4.expose
 class Replica(object):
@@ -20,42 +19,7 @@ class Replica(object):
 
         self.id = uuid.uuid4()
 
-    def create_db(self, user_id, movie_id, rating) -> None:
-
-        connection = sqlite3.connect("./database/ratings.db")
-
-        cursor = connection.cursor()
-
-        cursor.execute("INSERT INTO ratings VALUES (%, %, %, %)".format(user_id, movie_id, rating, time.time()))
-
-        connection.commit()
-
-    def read_db(self, movie_id: str) -> float:
-
-        connection = sqlite3.connect("./database/ratings.db")
-
-        cursor = connection.cursor()
-
-        print("Getting rating for {0}...".format(movie_id))
-
-        cursor.execute("SELECT ROUND(AVG(rating)) FROM ratings WHERE movieId=?", (movie_id, ))
-
-        rating = cursor.fetchone()[0]
-
-        print("Calculated", rating, end="...\n")
-
-        return rating
-
-    def update_db(self, movie_id, user_id, rating) -> None:
-
-        connection = sqlite3.connect("./database/ratings.db")
-
-        cursor = self.connection.cursor()
-
-        cursor.execute("UPDATE ratings SET rating=? WHERE (movieID=? AND userId=?)", (rating, movie_id, user_id,))
-
-        connection.commit()
-
+    value = DB()
     # The value of the application state as maintained by the RM. Each RM is a state machine, which begins with a
     # specified initial value and is thereafter solely the result of applying update operations to that state.
 
@@ -63,7 +27,7 @@ class Replica(object):
     # Represents updates currently reflected in the value. Contains one entry for every entry manager, and is updated
     # whenever an update operation is applied to the value.
 
-    update_log: List[Log] = []
+    update_log = Log()
     # All update operations are recorded in the log as soon as they arrive, although they may be applied in a different
     # order. An update is stable if it can be applied consistently with the desired ordering; an arriving update is
     # stored until it is stable and can be applied. It then remains in the log until the RM receives confirmation that
@@ -77,7 +41,7 @@ class Replica(object):
     # Represents those updates that have been accepted by the RM (placed in the RM's update_log). Differs from the
     # value_timestamp because not all updates in the log are stable.
 
-    executed_operation_table: List[int] = []
+    executed_operation_table: List[str] = []
     # Maintained to prevent an update being applied twice. Is checked before an update is added to the log.
     # The same update may arrive at a given replica manager from a FE and in gossip messages from other RMs. To prevent
     # an update being applied twice, this table contains the unique FE IDs of updates that have been applied to the
@@ -94,132 +58,102 @@ class Replica(object):
     # Used to establish whether an update has been applied to all RMs.
 
     hold_back: queue.Queue = queue.Queue()
-    id: int = 1
-
-    # Querys and
 
     def query(self, query: FrontendRequest) -> ReplicaResponse:
 
-        # It may as well be here, right?
-        # We can re-factor later if that makes more sensee.
-
         print("Received query from FE", query, end="...\n")
 
-        prev = query.prev    # The previous timestamp
-        request = query.request  # The request passed to the FE
-        method: Method = request.method  # The method passed to the client
-        params = request.params
+        prev: Timestamp = query.prev    # The previous timestamp
+        request: ClientRequest = query.request  # The request passed to the FE
 
-        if method == Method.CREATE:
+        # q can be applied to the replica's value if q.prev <= valueTS
+        if prev <= self.value_timestamp:
 
-            value = self.create_db(**params), prev
+            result = self.execute_client_request(request)
 
-        elif method == Method.READ:
-
-            value = self.read_db(**params), prev
-
-        elif method == Method.UPDATE:
-
-            value = self.update_db(**params), prev
+            return ReplicaResponse(result, self.value_timestamp)
 
         else:
 
-            value = "Lol"
+            self.hold_back.put(query)  # Might want a block or a timeout # Throw an error.
 
-        result = ReplicaResponse(value[0], self.value_timestamp)
+            raise StabilityError("RM is holding out-dated information")
 
-        print("Returning", result, end="\n\n")
-
-        return result
-
-        # else:
-
-            # self.hold_back.put(query)  # Might want a block or a timeout
-
-            # print("Putting in hold-back queue")  # So when is this queue updated?
-
-            # Either waits for the missing updates, or requests the updates from the RMs concerned.
-
-
-
-            # That corresponds to the hold_back queue.
-
-            # If it hasn't already seen it before (i.e. the id is NOT in... executed operations table
-
-            # Prev is the current label possessed by the front-end.
-            # Raise an exception here?
-
-            # This returns... the value of the actual query, and the label itself.
-            # Ah, so we don't even need multiple methods! Nice.
-
-    def update(self, update: Any) -> FrontendRequest:
-
-        # Hasn't been deserialised properly.
-        # Time to make an object!
-
-        # Let's get at least ONE of these working. Current block is the Operation class.
+    def update(self, update: FrontendRequest) -> ReplicaResponse:
 
         print("Received update from FE", update, end="...\n")
 
-        operation = update["op"]
-        id = update["id"]
-        prev = update["prev"]  # The previous timestamp
-        request = operation["request"]  # The request passed to the FE
-        method: Method = Method(request["method"])  # The method passed to the client
-        params = request["params"]
+        id: str = update.id
+        prev: Timestamp = update.prev  # The previous timestamp
+        request: ClientRequest = update.request  # The request passed to the FE
 
-        if self.compare_timestamps(prev):
+        if id not in self.executed_operation_table:
 
-            # Condition ensures that all the updates on which this update depends have already been applied.
-            # If not met: check again when gossip messages arrive.
+            if self.in_update_log(id) is False:
 
-            # How do I check the update_log? Ah. Check whether the created log is already there?
+                if prev <= self.value_timestamp:
 
-            if id not in self.executed_operation_table:
+                    self.replica_timestamp.increment(self.id)
 
-                self.replica_timestamp.increment(self.id)
+                    ts = prev.copy()
+                    ts.set(self.id, self.replica_timestamp.get(self.id))
 
-                ts = update.prev.copy()
-                ts[self.id] = self.replica_timestamp.get(self.id)
+                    log = Record(self.id, ts, request, prev, id)
 
-                update_log = Log(self.id, ts, update.operation, update.prev, update.id)
+                    self.update_log.add(log)
 
-                print("Adding to update log", update_log)
+                    result = self.apply_update(log)
 
-                self.update_log.append(update_log)
+                    return ReplicaResponse(result, self.value_timestamp)
 
+                else:
 
+                    self.chat_shit()
 
-                # Increment the ith element. Implies that we're giving a key (or number) by the FE
-                # on registration./
+                    # And, having chatted shit, do something.
+                    # But there's a real problem here. I can't leave messages hanging.
+                    # The original queue method may in fact have been superior.
+                    # But how would I know where to direct my responses to?
+                    # I only have one client... but I'm determined to make this applicable to as many as I might want.
 
-    # Exchange gossip messages when a replica finds that it is missing an update sent to one of its peers
-    # that it needs to process a request.
+    def apply_update(self, record: Record) -> Any:
 
-    def ack(self):
+        if record.prev <= self.value_timestamp:
 
-        self.replica_timestamp[self.id] += 1
+            print("Applying update:", record)
 
-        return True
+            result = self.execute_client_request(record.op)
+            self.value_timestamp.merge(record.ts)
+            self.executed_operation_table.append(record.id)
 
-    def gossip(self, gossip):
+            return result
+
+        else:
+
+            raise StabilityError
+
+    def gossip(self, gossip, id):
 
         print("Gossip received from an RM")
 
-        # We either merge the arriving log with its own (as it may contain updates not seen by the receiving RM before);
-        # apply any updates that may become stable and have not been executed before (stable updates in the arrived log
-        # may in turn make pending updates become stable); and to eliminate records from the log and entries in the
-        # executed operations table when it is known that updates have been applied everywhere and for which there is no
-        # danger of repeats.
+        log: Log = gossip.log
+        ts: Timestamp = gossip.ts
 
-        # The RM uses the entries in its timestamp table to estimate which updates any other replica manager has not yet
-        # received.
+        # We're not merging a single log.
 
-        self.merge_logs(gossip.log)
+        self.update_log.merge(log, self.replica_timestamp)
+        self.replica_timestamp.merge(ts)
 
-        self.replica_timestamp = self.replica_timestamp.merge(gossip.ts)
+        stable: List[Record] = self.update_log.stable(self.replica_timestamp)
 
-        # The replica manager collects the set S of any updates that are now stable. Then we sort them.
+        for record in stable:
+
+            self.apply_update(record)
+
+            self.timestamp_table[id] = ts
+
+            # TODO: discard logs
+            # TODO: eliminate executed operation entries
 
     def chat_shit(self):
 
@@ -229,41 +163,41 @@ class Replica(object):
 
         print("Chatting shit to: ", replicas)
 
-
-    def get_stable_updates(self):
-
-        print("Getting stable updates")
-
-        # An stable update is one that may be applied consistently with its ordering guarantees (causal, forced, or
-        # immediate). Causal ordering takes into account causal relationships between messages, in that if a message
-        # happens before another message in the distributed system, this soo-called causal relationship will be
-        # preserved in the delivery of the associated messages at all processes.
-
-        # If the issue of request r happened before the issue of request r', then any correct RM that handles r' handles
-        # r before it. This is necessarily true, because we're just appending, right? But then.. up until when?
-        # Would every gossip message not simply clear the update_log?
-
-        # Aha! So: sort them in order of all the replica managers, right? Any update which... has ANY component greater than
-        # those now held in the log...? Mayhaps let's leave the gossip stuff until tomorrow?
-
     def get_status(self) -> Status:
 
         return Status.random
 
-    def merge_logs(self, log):
+    def execute_client_request(self, request: ClientRequest):
 
-        print("Merging logs: ", self.log, log)
+        method: Method = request.method  # The method passed to the client
+        params = request.params
+        value = None
 
-        for record in log:
+        if method == Method.CREATE:
 
-            if self.compare_timestamps(record):
+            value = self.value.create(**params)
 
-                self.update_log.append(record)
+        elif method == Method.READ:
+
+            value = self.value.read(**params)[0]
+
+        elif method == Method.UPDATE:
+
+            value = self.value.update(**params)
+
+        return value
+
+    # Okay, we're getting there.
+    # There's no way that this will run.
+    # Let's get it running before I head off to powerlifting.
 
 
 if __name__ == '__main__':
 
     print("Creating replica...")
+
+    # How does a replica know? Ah. If, when compared, it doesn't contain the entry, add it!
+    # For the timestamps, I mean. Right?
 
     daemon = Pyro4.Daemon()
     ns = Pyro4.locateNS()
@@ -280,6 +214,6 @@ if __name__ == '__main__':
     for (fe_name, fe_uri) in frontends.items():
 
         frontend = Pyro4.Proxy(fe_uri)
-        frontend.add_replica(name, uri)
+        frontend.add_replica(name, uri, id)
 
     daemon.requestLoop()
