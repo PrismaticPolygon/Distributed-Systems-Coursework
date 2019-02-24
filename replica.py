@@ -12,12 +12,16 @@ from record import Record, Log
 # That was silly of me. I could just store it in an integer. OR: add the front-ends to the replica timestamp.
 # But it's from multiple front-ends: better, I just store the
 
+# Then: I could create the stuff in here.
+
 @Pyro4.expose
 class Replica(object):
 
     def __init__(self):
 
         self.id = uuid.uuid4()
+
+        # It should, right?
 
     value = DB()
     # The value of the application state as maintained by the RM. Each RM is a state machine, which begins with a
@@ -59,12 +63,16 @@ class Replica(object):
 
     hold_back: queue.Queue = queue.Queue()
 
+
+
     def query(self, query: FrontendRequest) -> ReplicaResponse:
 
         print("Received query from FE", query, end="...\n")
 
         prev: Timestamp = query.prev    # The previous timestamp
         request: ClientRequest = query.request  # The request passed to the FE
+
+        # Ah, it's the old timestamp one! That's going to prove difficult. I could add it on replica creation, perhaps.
 
         # q can be applied to the replica's value if q.prev <= valueTS
         if prev <= self.value_timestamp:
@@ -169,6 +177,8 @@ class Replica(object):
 
     def execute_client_request(self, request: ClientRequest):
 
+        print("Executing client request", request)
+
         method: Method = request.method  # The method passed to the client
         params = request.params
         value = None
@@ -179,7 +189,7 @@ class Replica(object):
 
         elif method == Method.READ:
 
-            value = self.value.read(**params)[0]
+            value = self.value.read(**params)
 
         elif method == Method.UPDATE:
 
@@ -207,13 +217,13 @@ if __name__ == '__main__':
     name = "replica-" + str(replica.id)
     ns.register(name, uri, metadata={"resource:replica"})
 
-    print("Replica created at", uri, end="\n\n")
+    print("{0} running".format(name), end="\n\n")
 
     frontends = ns.list(metadata_all={"resource:frontend"})
 
     for (fe_name, fe_uri) in frontends.items():
 
         frontend = Pyro4.Proxy(fe_uri)
-        frontend.add_replica(name, uri, id)
+        frontend.add_replica(name, uri, replica.id)
 
     daemon.requestLoop()

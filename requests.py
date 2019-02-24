@@ -30,7 +30,7 @@ class Timestamp:
 
         for (id, value) in self.replicas.items():
 
-            if other.get(id) is not None:
+            if id in other:
 
                 if value > other.get(id):
 
@@ -42,13 +42,17 @@ class Timestamp:
 
         for (id, value) in self.replicas.items():
 
-            if other.get(id) is not None:
+            if id in other:
 
                 if value >= other.get(id):
 
                     return False
 
         return True
+
+    def __contains__(self, id: str):
+
+        return id in self.replicas
 
     def __eq__(self, other) -> bool:
 
@@ -86,9 +90,13 @@ class Timestamp:
 
     def merge(self, ts: 'Timestamp') -> None:
 
-        for (id, value) in self.replicas.items():
+        for (id, value) in ts.replicas.items():
 
-            if ts.get(id) > self.replicas.get(id):
+            if id not in self.replicas:
+
+                self.replicas[id] = value
+
+            elif value > self.replicas.get(id):
 
                 self.replicas[id] = ts.get(id)
 
@@ -121,10 +129,10 @@ class ClientRequest:
 
     def __str__(self):
 
-        return {
+        return str({
             "method": self.method,
             "params": self.params
-        }
+        })
 
 
 def client_request_to_dict(client_request: ClientRequest):
@@ -166,12 +174,12 @@ class FrontendRequest:
 
     def __str__(self):
 
-        return {
+        return str({
             "prev": str(self.prev),
             "request": str(self.request),
             "operation": str(self.operation),
             "id": str(self.id)
-        }
+        })
 
 
 def frontend_request_to_dict(frontend_request: FrontendRequest) -> Dict:

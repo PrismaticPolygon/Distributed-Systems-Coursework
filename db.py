@@ -14,7 +14,6 @@ class DB:
 
         connection.commit()
 
-
     def read(self, movie_id: str) -> float:
         connection = sqlite3.connect("./database/ratings.db")
 
