@@ -34,8 +34,3 @@ class Method(Enum):
     CREATE = "CREATE"
     READ = "READ"
     UPDATE = "UPDATE"
-
-
-class Operation(Enum):
-    QUERY = 0
-    UPDATE = 1

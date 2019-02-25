@@ -1,4 +1,4 @@
-from enums import Method, Operation
+from enums import Method
 from typing import Dict, Any
 from Pyro4.util import SerializerBase
 import Pyro4
@@ -6,10 +6,6 @@ import uuid
 from timestamp import Timestamp
 
 Pyro4.config.SERIALIZER = "serpent"
-
-
-class StabilityError(Exception):
-    pass
 
 
 class ClientRequest:
@@ -21,7 +17,10 @@ class ClientRequest:
 
     def __str__(self):
 
-        return str(self.to_dict())
+        dict = self.to_dict()
+        dict["method"] = str(dict["method"])
+
+        return str(dict)
 
     def to_dict(self):
 
@@ -42,7 +41,7 @@ class ClientRequest:
 
 class FrontendRequest:
 
-    def __init__(self, prev: Timestamp, request: ClientRequest, operation: Operation, id: str=None):
+    def __init__(self, prev: Timestamp, request: ClientRequest, id: str=None):
 
         if id is None:
 
@@ -51,7 +50,6 @@ class FrontendRequest:
         self.id = id
         self.prev = prev
         self.request = request
-        self.operation = operation
 
     def __str__(self):
 
@@ -63,7 +61,6 @@ class FrontendRequest:
             "__class__": "FrontendRequest",
             "prev": self.prev.to_dict(),
             "request": self.request.to_dict(),
-            "operation": self.operation,
             "id": self.id
         }
 
@@ -73,7 +70,6 @@ class FrontendRequest:
         return FrontendRequest(
             Timestamp.from_dict("Timestamp", dict["prev"]),
             ClientRequest.from_dict("ClientRequest", dict["request"]),
-            dict["operation"],
             dict["id"]
         )
 

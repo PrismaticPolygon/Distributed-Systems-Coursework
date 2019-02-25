@@ -2,7 +2,6 @@ import Pyro4
 from requests import ClientRequest
 from enums import Method
 
-# Okay! What's the next step? Let's get isolated CRUD operations working!
 
 if __name__ == "__main__":
 
@@ -49,8 +48,8 @@ if __name__ == "__main__":
 
                 request = ClientRequest(method, params)
 
-                print("Sending request", request)
+                print("Requesting {0}...".format(request))
 
                 response = frontend.request(request)
 
-                print(response)
+                print("Received {0}".format(response), end="\n\n")

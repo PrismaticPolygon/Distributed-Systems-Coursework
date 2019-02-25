@@ -4,11 +4,11 @@ from typing import List, Any, Dict
 from db import DB
 
 import Pyro4
-from requests import ClientRequest, FrontendRequest, ReplicaResponse, StabilityError
+from requests import ClientRequest, FrontendRequest, ReplicaResponse
 from timestamp import Timestamp
 
 from enums import Status, Method
-from replica_classes import Record, Log, Gossip
+from replica_classes import Record, Log, Gossip, StabilityError
 
 
 @Pyro4.expose
@@ -58,33 +58,32 @@ class Replica(object):
     # Contains a vector timestamp for each other RM, filled with timestamps that arrive from them in gossip messages.
     # Used to establish whether an update has been applied to all RMs.
 
-    hold_back: queue.Queue = queue.Queue()
-
     def query(self, query: FrontendRequest) -> ReplicaResponse:
 
-        print("Received query from FE", query, end="...\n")
+        print("Received query from FE", query.prev, end="...\n")
 
         prev: Timestamp = query.prev    # The previous timestamp
         request: ClientRequest = query.request  # The request passed to the FE
-
-        # Ah, it's the old timestamp one! That's going to prove difficult. I could add it on replica creation, perhaps.
 
         # q can be applied to the replica's value if q.prev <= valueTS
         if prev <= self.value_timestamp:
 
             result = self.execute_client_request(request)
 
-            return ReplicaResponse(result, self.value_timestamp)
-
+        # RM is holding out-dated information: request gossip from the other RMs and then respond.
         else:
 
-            self.hold_back.put(query)  # Might want a block or a timeout # Throw an error.
+            self.request_gossip()
 
-            raise StabilityError("RM is holding out-dated information")
+            result = self.execute_client_request(request)
+
+        return ReplicaResponse(result, self.value_timestamp)
+
+    # TODO: request gossip from specific managers
 
     def update(self, update: FrontendRequest) -> ReplicaResponse:
 
-        print("Received update from FE", update, end="...\n")
+        print("Received update from FE", update.prev, end="...\n")
 
         id: str = update.id
         prev: Timestamp = update.prev  # The previous timestamp
@@ -92,85 +91,45 @@ class Replica(object):
 
         if id not in self.executed_operation_table:
 
-            print("id not in XO table")
-
             if id not in self.update_log:
 
-                print("id not in update log")
+                self.replica_timestamp.increment(self.id)
 
-                if prev <= self.value_timestamp:
+                ts = prev.copy()
+                ts.set(self.id, self.replica_timestamp.get(self.id))
 
-                    # So we're failing at this comparison. Why? I'm passing the wrong thing, somewhere...
+                record = Record(self.id, ts, request, prev, id)
 
-                    print("Passed prev check")
+                self.update_log.add(record)
 
-                    self.replica_timestamp.increment(self.id)
+                self.apply_update(record)
 
-                    ts = prev.copy()
-                    ts.set(self.id, self.replica_timestamp.get(self.id))
+                return ReplicaResponse(None, ts)
 
-                    log = Record(self.id, ts, request, prev, id)
+        return ReplicaResponse(None, self.value_timestamp)  # Update has already been performed
 
-                    self.update_log.add(log)
+    def apply_update(self, record: Record) -> None:
 
-                    result = self.apply_update(log)
+        self.execute_client_request(record.op)
+        self.value_timestamp.merge(record.ts)
+        self.executed_operation_table.append(record.id)
 
-                    print("Update result:", result)
+    def receive_gossip(self, gossip: Gossip, id):
 
-                    return ReplicaResponse(result, self.value_timestamp)
+        print("{0} gossiped {1}".format(id, gossip.ts))
 
-                else:
-
-                    # We've got an error boss!
-
-                    self.chat_shit()
-
-                    # And, having chatted shit, do something.
-                    # But there's a real problem here. I can't leave messages hanging.
-                    # The original queue method may in fact have been superior.
-                    # But how would I know where to direct my responses to?
-                    # I only have one client... but I'm determined to make this applicable to as many as I might want.
-
-    def apply_update(self, record: Record) -> Any:
-
-        if record.prev <= self.value_timestamp:
-
-            print("Applying update:", record)
-
-            result = self.execute_client_request(record.op)
-            self.value_timestamp.merge(record.ts)
-            self.executed_operation_table.append(record.id)
-
-            return result
-
-        else:
-
-            raise StabilityError
-
-    def gossip(self, gossip: Gossip, id):
-
-        # *sigh* hasn't been deserialised properly. Who knows why.
-
-        print(type(gossip))
-
-        print("{0} gossiped {1}".format(id, gossip))
+        # I receive gossip from others but I'm not checking whether I ought to apply it or not.
+        # I.e. either it's my XO table. This is so hard to test!
 
         log: Log = gossip.log
         ts: Timestamp = gossip.ts
 
-        print("Merging update log")
-
         self.update_log.merge(log, self.replica_timestamp)
-
-        print("Merging replica timestamp")
-
         self.replica_timestamp.merge(ts)
 
-        print("Getting stable records")
+        print("New replica timestamp:", self.replica_timestamp)
 
         stable: List[Record] = self.update_log.stable(self.replica_timestamp)
-
-        # No stable records. But why?
 
         for record in stable:
 
@@ -178,20 +137,39 @@ class Replica(object):
 
             self.timestamp_table[id] = ts
 
+            #
+
             # But what do I do here?!
+            # I think that should be the final line. So: let's just improve logging.
 
             # TODO: discard logs
             # TODO: eliminate executed operation entries
 
-    def chat_shit(self):
+    def request_gossip(self):
 
-        print("Gossip...")
+        print("Requesting gossip...")
 
         ns = Pyro4.locateNS()
-
         replicas = ns.list(metadata_all={"resource:replica"})
 
-        # Shouldn't that make it a serialisation error? Let's restructure now, shall we?
+        for (name, uri) in replicas.items():
+
+            if name != self.id:
+
+                print("Requesting gossip from", name, end="...\n")
+
+                replica: Replica = Pyro4.Proxy(uri)
+
+                replica.gossip()
+
+        print("Finished requesting gossip\n")
+
+    def gossip(self):
+
+        print("Gossiping...")
+
+        ns = Pyro4.locateNS()
+        replicas = ns.list(metadata_all={"resource:replica"})
 
         gossip = Gossip(self.update_log, self.replica_timestamp)
 
@@ -203,15 +181,13 @@ class Replica(object):
 
                 replica: Replica = Pyro4.Proxy(uri)
 
-                replica.gossip(gossip, self.id)
-
-                # Only seemed to work with the latter.
-
-            # Once I've chatted shit... try again? I need to tell everyone that I've received their gossip, right?
-
-        # Ah. I can trust that the operation has been run, and it's an update, so I don't return anything! Of course it fucking hangs!
+                replica.receive_gossip(gossip, self.id)
 
         print("Finished gossiping", end="\n\n")
+
+    # Strange. Despite the shit I've chatted, I only have on replica in my value timeestamp, my own.
+    # This is to be expected: I could not perform the update, after all. Actually, that IS wrong.
+    # I should have performed the update, and thus merged my timestamps.
 
     def get_status(self) -> Status:
 

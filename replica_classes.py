@@ -4,15 +4,19 @@ from requests import ClientRequest
 from Pyro4.util import SerializerBase
 
 
+class StabilityError(Exception):
+    pass
+
+
 class Record:
 
     def __init__(self, i: str, ts: Timestamp, op: ClientRequest, prev: Timestamp, id: str):
 
-        self.i = i
-        self.ts = ts
-        self.op = op
-        self.prev = prev
-        self.id = id
+        self.i = i  # Replica manager that
+        self.ts = ts    # Timestamp IF update is applied
+        self.op = op    # Actual request
+        self.prev = prev    # Timestamp sent from the frontend
+        self.id = id    # Unique ID of the update
 
     def __str__(self):
 
@@ -75,6 +79,8 @@ class Log:
 
     def stable(self, replica_ts: Timestamp) -> List[Record]:
 
+        print("Getting stable records... ", end="")
+
         stable: [Record] = []
 
         for record in self.records:
@@ -83,15 +89,23 @@ class Log:
 
                 stable.append(record)
 
+        print("{0} found".format(len(stable)))
+
         return sorted(stable, key=lambda record: record.ts)
 
     def merge(self, log: 'Log', replica_ts: Timestamp):
 
+        print("Merging update log...")
+
         for record in log.records:
 
-            if record.ts <= replica_ts:
+            if (record.ts <= replica_ts) is False:
 
-                self.records.append(record)
+                # If I don't already have the log (should this be possible?)
+
+                if record.id not in self:
+
+                    self.records.append(record)
 
     def to_dict(self):
 

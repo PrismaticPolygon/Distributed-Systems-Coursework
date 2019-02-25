@@ -2,7 +2,6 @@ from typing import Dict
 from Pyro4.util import SerializerBase
 
 
-# I could cheat by using str to serialise it. I'd rather not, though: let's see if an error is thrown.
 # https://stackoverflow.com/questions/4555932/public-or-private-attribute-in-python-what-is-the-best-way
 
 class Timestamp:
@@ -21,9 +20,6 @@ class Timestamp:
         return str(self.to_dict())
 
     def __le__(self, other: 'Timestamp') -> bool:
-
-        print("Comparing ", other.replicas, self.replicas)
-
 
         ids = set()
 

@@ -2,7 +2,7 @@ import uuid
 
 import Pyro4
 
-from enums import Status, Operation, Method
+from enums import Status, Method
 from replica import Replica
 from requests import ClientRequest, FrontendRequest, ReplicaResponse
 from timestamp import Timestamp
@@ -37,16 +37,12 @@ class Frontend(object):
 
         print("{0} added".format(name))
 
-        # Do I actually need my replicas? Not if I have my prev list. Wait, I do need the URIs.
-
         self.replicas[name] = uri
         self.prev.add(name)
 
     def get_replica(self) -> Replica:
 
-        print("Getting replica... ")
-
-        # Ah, replicas aren't adding themselves..
+        # print("Getting replica... ")
 
         overloaded = None
 
@@ -55,7 +51,7 @@ class Frontend(object):
             replica: Replica = Pyro4.Proxy(uri)
             status: Status = Status(replica.get_status())
 
-            print(name + " reporting status:", status, end="...\n")
+            # print(name + " reporting status:", status, end="...\n")
 
             if status is Status.ACTIVE:
 
@@ -75,10 +71,6 @@ class Frontend(object):
 
         raise ConnectionRefusedError("All replicas offline")
 
-    # They're not the same size because we don't KNOW how big it ought to be
-    # That implies fore-knowledge of the number of replicas.
-    # For now I can fix the method, but we'll keep it in mind...
-
     @Pyro4.expose
     def request(self, request: ClientRequest):
 
@@ -90,21 +82,21 @@ class Frontend(object):
 
             if request.method is Method.READ:
 
-                print("Sending query...")
+                query: FrontendRequest = FrontendRequest(self.prev, request)
 
-                query: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
+                print("Sent {0}...".format(self.prev))
 
                 response: ReplicaResponse = replica.query(query)
 
             else:
 
-                print("Sending update...")
+                update: FrontendRequest = FrontendRequest(self.prev, request)
 
-                update: FrontendRequest = FrontendRequest(self.prev, request, Operation.UPDATE)
+                print("Sent {0}...".format(self.prev))
 
                 response: ReplicaResponse = replica.update(update)
 
-            print(response)
+            print("Got  {0}...".format(response.label))
 
             self.prev = response.label
 
@@ -113,10 +105,6 @@ class Frontend(object):
         except ConnectionRefusedError:
 
             return "All replicas offline"
-
-    def handle_replica_response(self, response: ReplicaResponse):
-
-        print("Handling replica response...")
 
 
 if __name__ == '__main__':
