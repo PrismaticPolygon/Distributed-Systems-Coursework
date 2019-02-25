@@ -17,16 +17,18 @@ class Replica(object):
     def __init__(self):
 
         self.id = "replica-" + str(uuid.uuid4())
+
+        # Represents updates currently reflected in the value. Contains one entry for every replica manager, and is
+        # updated whenever an update operation is applied to the value.
         self.value_timestamp = Timestamp({self.id: 0})
+
+        # Represents those updates that have been accepted by the RM (placed in the RM's update_log). Differs from the
+        # value_timestamp because not all updates in the log are stable.
         self.replica_timestamp = Timestamp({self.id: 0})
 
     value = DB()
     # The value of the application state as maintained by the RM. Each RM is a state machine, which begins with a
     # specified initial value and is thereafter solely the result of applying update operations to that state.
-
-    # value_timestamp = Timestamp()
-    # Represents updates currently reflected in the value. Contains one entry for every entry manager, and is updated
-    # whenever an update operation is applied to the value.
 
     update_log = Log()
     # All update operations are recorded in the log as soon as they arrive, although they may be applied in a different
@@ -37,10 +39,6 @@ class Replica(object):
     # A RM keeps updates in the log either because it is not yet stable (i.e. cannot be applied consistently with its
     # ordering guarantees OR, even though the update has become stable and has been applied to the value, the RM has not
     # received confirmation that this update has been received at all other RMs.
-
-    # replica_timestamp = Timestamp()
-    # Represents those updates that have been accepted by the RM (placed in the RM's update_log). Differs from the
-    # value_timestamp because not all updates in the log are stable.
 
     executed_operation_table: List[str] = []
     # Maintained to prevent an update being applied twice. Is checked before an update is added to the log.
@@ -57,6 +55,8 @@ class Replica(object):
 
     # Contains a vector timestamp for each other RM, filled with timestamps that arrive from them in gossip messages.
     # Used to establish whether an update has been applied to all RMs.
+
+    # When we add a request to the log, that's when we update the replica time-stamp!
 
     def query(self, query: FrontendRequest) -> ReplicaResponse:
 
@@ -100,13 +100,39 @@ class Replica(object):
 
                 record = Record(self.id, ts, request, prev, id)
 
+                # Could get out of sync HERE!
+
                 self.update_log.add(record)
 
-                self.apply_update(record)
+                if (record.prev <= self.value_timestamp) is False:
+
+                    self.request_gossip()
+
+                    # gt_ids = self.replica_timestamp.get_gt_ids(ts)
+                    #
+                    # print(gt_ids)
+                    #
+                    # ns = Pyro4.locateNS()
+                    #
+                    # for id in gt_ids:
+                    #
+                    #     uri = ns.lookup(id)
+                    #
+                    #     print("Requesting gossip from", id, end="...\n")
+                    #
+                    #     replica: Replica = Pyro4.Proxy(uri)
+                    #
+                    #     replica.gossip()
+
+                else:
+
+                    self.apply_update(record)
 
                 return ReplicaResponse(None, ts)
 
         return ReplicaResponse(None, self.value_timestamp)  # Update has already been performed
+
+    # At the moment, the replicas that we're goss
 
     def apply_update(self, record: Record) -> None:
 
@@ -118,29 +144,31 @@ class Replica(object):
 
         print("{0} gossiped {1}".format(id, gossip.ts))
 
-        # I receive gossip from others but I'm not checking whether I ought to apply it or not.
-        # I.e. either it's my XO table. This is so hard to test!
+        # Interesting. I got 'old' gossip.
+        # And it wasn't QUITE in order.
 
         log: Log = gossip.log
         ts: Timestamp = gossip.ts
+
+        print("New records:", len(log.records))
 
         self.update_log.merge(log, self.replica_timestamp)
         self.replica_timestamp.merge(ts)
 
         print("New replica timestamp:", self.replica_timestamp)
+        print("New log size:", len(self.update_log.records))
+
+        # Not quite in the right order, it seems. Because I've already incremented my timestamp? The wrong bit of it, perhaps?
 
         stable: List[Record] = self.update_log.stable(self.replica_timestamp)
 
         for record in stable:
 
-            self.apply_update(record)
+            if record.id not in self.executed_operation_table:
 
-            self.timestamp_table[id] = ts
+                self.apply_update(record)
 
-            #
-
-            # But what do I do here?!
-            # I think that should be the final line. So: let's just improve logging.
+                self.timestamp_table[id] = ts
 
             # TODO: discard logs
             # TODO: eliminate executed operation entries
@@ -185,10 +213,6 @@ class Replica(object):
 
         print("Finished gossiping", end="\n\n")
 
-    # Strange. Despite the shit I've chatted, I only have on replica in my value timeestamp, my own.
-    # This is to be expected: I could not perform the update, after all. Actually, that IS wrong.
-    # I should have performed the update, and thus merged my timestamps.
-
     def get_status(self) -> Status:
 
         return Status.random
@@ -203,7 +227,7 @@ class Replica(object):
 
         if method == Method.CREATE:
 
-            value = self.value.create(**params)
+            self.value.create(**params)
 
         elif method == Method.READ:
 
@@ -211,7 +235,7 @@ class Replica(object):
 
         elif method == Method.UPDATE:
 
-            value = self.value.update(**params)
+            self.value.update(**params)
 
         return value
 

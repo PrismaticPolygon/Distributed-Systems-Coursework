@@ -19,6 +19,7 @@ class ClientRequest:
 
         dict = self.to_dict()
         dict["method"] = str(dict["method"])
+        del dict["__class__"]
 
         return str(dict)
 

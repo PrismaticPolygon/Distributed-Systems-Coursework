@@ -12,7 +12,7 @@ class Record:
 
     def __init__(self, i: str, ts: Timestamp, op: ClientRequest, prev: Timestamp, id: str):
 
-        self.i = i  # Replica manager that
+        self.i = i  # Replica manager id
         self.ts = ts    # Timestamp IF update is applied
         self.op = op    # Actual request
         self.prev = prev    # Timestamp sent from the frontend
@@ -22,11 +22,11 @@ class Record:
 
         return str(self.to_dict())
 
-    def __eq__(self, other):
+    def __eq__(self, other: 'Record') -> bool:
 
         return other.id is self.id
 
-    def to_dict(self):
+    def to_dict(self) -> Dict:
 
         return {
             "__class__": "Record",
@@ -38,7 +38,7 @@ class Record:
         }
 
     @staticmethod
-    def from_dict(classname: 'str', dict: Dict):
+    def from_dict(classname: 'str', dict: Dict) -> 'Record':
 
         return Record(
             dict["i"],
@@ -67,19 +67,17 @@ class Log:
 
         self.records.append(record)
 
-    def __contains__(self, id: str):
+    def __contains__(self, other: Record):
 
         for record in self.records:
 
-            if record.id == id:
+            if record == other:
 
                 return True
 
         return False
 
     def stable(self, replica_ts: Timestamp) -> List[Record]:
-
-        print("Getting stable records... ", end="")
 
         stable: [Record] = []
 
@@ -89,7 +87,7 @@ class Log:
 
                 stable.append(record)
 
-        print("{0} found".format(len(stable)))
+        print("{0} found\n".format(len(stable)))
 
         return sorted(stable, key=lambda record: record.ts)
 
@@ -101,9 +99,7 @@ class Log:
 
             if (record.ts <= replica_ts) is False:
 
-                # If I don't already have the log (should this be possible?)
-
-                if record.id not in self:
+                if not (record in self):
 
                     self.records.append(record)
 

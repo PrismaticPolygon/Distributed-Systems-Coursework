@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 from Pyro4.util import SerializerBase
 
 
@@ -6,20 +6,24 @@ from Pyro4.util import SerializerBase
 
 class Timestamp:
 
+    # What am I struggling with?!
+
     def __init__(self, replicas=None):
 
         if replicas is None:
-
             replicas = dict()
 
         self.replicas: Dict[str, int] = replicas
-        self.frontend_updates = 0
 
     def __str__(self):
 
         return str(self.to_dict())
 
     def __le__(self, other: 'Timestamp') -> bool:
+
+        return self < other or self == other
+
+    def __lt__(self, other: 'Timestamp') -> bool:
 
         ids = set()
 
@@ -36,33 +40,16 @@ class Timestamp:
 
             if id in self.replicas and id in other.replicas:
 
-                if other.replicas.get(id) < self.replicas.get(id):
+                if other.replicas.get(id) <= self.replicas.get(id):
 
                     return False
 
             if id not in self.replicas and id in other.replicas:
 
-                self.add(id)    # The id hasn't been seen before, so no updates have been read from it.
+                self.add(id)  # The id hasn't been seen before, so no updates have been read from it.
 
                 if other.replicas.get(id) > 0:
-
                     return False
-
-        return True
-
-    def __lt__(self, other: 'Timestamp') -> bool:
-
-        for (id, value) in other.replicas.items():
-
-            if id in self.replicas:
-
-                if value <= self.get(id):
-
-                    return False
-
-            else:
-
-                self.add(id)    # This is fine: it's 0, so must be less than. Wait. This is only for sorting, after all.
 
         return True
 
@@ -70,11 +57,15 @@ class Timestamp:
 
         return id in self.replicas
 
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: 'Timestamp') -> bool:
 
-        for (id, value) in self.replicas.items():
+        for (id, value) in other.replicas.items():
 
-            if other.get(id) != value:
+            if id not in self.replicas and value > 0:
+
+                return False
+
+            elif id in self.replicas and value != self.replicas[id]:
 
                 return False
 
@@ -84,7 +75,7 @@ class Timestamp:
 
         self.replicas[i] = value
 
-    def add(self, id: str):
+    def add(self, id: str) -> None:
 
         self.replicas[id] = 0
 
@@ -96,7 +87,7 @@ class Timestamp:
 
         return self.replicas[i]
 
-    def size(self) -> int:
+    def __len__(self) -> int:
 
         return len(self.replicas)
 
@@ -116,7 +107,7 @@ class Timestamp:
 
                 self.replicas[id] = ts.get(id)
 
-    def to_dict(self):
+    def to_dict(self) -> Dict:
 
         return {
             "__class__": "Timestamp",
@@ -124,7 +115,7 @@ class Timestamp:
         }
 
     @staticmethod
-    def from_dict(classname: str, dict: Dict):
+    def from_dict(classname: str, dict: Dict) -> 'Timestamp':
 
         del dict["__class__"]
 

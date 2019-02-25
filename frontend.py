@@ -33,12 +33,12 @@ class Frontend(object):
         # of the replicated data observed by the client.
         self.prev = Timestamp()
 
-    def add_replica(self, name, uri) -> None:
+    def add_replica(self, id, uri) -> None:
 
-        print("{0} added".format(name))
+        print("{0} added".format(id))
 
-        self.replicas[name] = uri
-        self.prev.add(name)
+        self.replicas[id] = uri
+        self.prev.add(id)
 
     def get_replica(self) -> Replica:
 
