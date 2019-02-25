@@ -67,11 +67,11 @@ class Log:
 
         self.records.append(record)
 
-    def __contains__(self, other: Record):
+    def __contains__(self, id: str):
 
         for record in self.records:
 
-            if record == other:
+            if id == record.id:
 
                 return True
 
@@ -87,19 +87,15 @@ class Log:
 
                 stable.append(record)
 
-        print("{0} found\n".format(len(stable)))
-
         return sorted(stable, key=lambda record: record.ts)
 
     def merge(self, log: 'Log', replica_ts: Timestamp):
-
-        print("Merging update log...")
 
         for record in log.records:
 
             if (record.ts <= replica_ts) is False:
 
-                if not (record in self):
+                if not (record.id in self):
 
                     self.records.append(record)
 

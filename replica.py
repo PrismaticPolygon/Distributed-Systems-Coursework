@@ -89,40 +89,36 @@ class Replica(object):
         prev: Timestamp = update.prev  # The previous timestamp
         request: ClientRequest = update.request  # The request passed to the FE
 
+        print(id, request)
+
+        # Wow, we don't even get here!
+
         if id not in self.executed_operation_table:
 
             if id not in self.update_log:
 
-                self.replica_timestamp.increment(self.id)
+                print("Incrementing replica")
+
+                self.replica_timestamp.replicas[self.id] += 1
 
                 ts = prev.copy()
-                ts.set(self.id, self.replica_timestamp.get(self.id))
+                ts.replicas[self.id] = self.replica_timestamp.replicas[self.id]
+
+                print("Copy ts")
 
                 record = Record(self.id, ts, request, prev, id)
+
+                print("Created record")
 
                 # Could get out of sync HERE!
 
                 self.update_log.add(record)
 
+                print("Updated log")
+
                 if (record.prev <= self.value_timestamp) is False:
 
                     self.request_gossip()
-
-                    # gt_ids = self.replica_timestamp.get_gt_ids(ts)
-                    #
-                    # print(gt_ids)
-                    #
-                    # ns = Pyro4.locateNS()
-                    #
-                    # for id in gt_ids:
-                    #
-                    #     uri = ns.lookup(id)
-                    #
-                    #     print("Requesting gossip from", id, end="...\n")
-                    #
-                    #     replica: Replica = Pyro4.Proxy(uri)
-                    #
-                    #     replica.gossip()
 
                 else:
 
@@ -135,6 +131,8 @@ class Replica(object):
     # At the moment, the replicas that we're goss
 
     def apply_update(self, record: Record) -> None:
+
+        # I think I'm perhaps not updating this correctly.
 
         self.execute_client_request(record.op)
         self.value_timestamp.merge(record.ts)
@@ -156,13 +154,14 @@ class Replica(object):
         self.replica_timestamp.merge(ts)
 
         print("New replica timestamp:", self.replica_timestamp)
-        print("New log size:", len(self.update_log.records))
-
-        # Not quite in the right order, it seems. Because I've already incremented my timestamp? The wrong bit of it, perhaps?
 
         stable: List[Record] = self.update_log.stable(self.replica_timestamp)
 
+        print("Stable:", stable)
+
         for record in stable:
+
+            # Shouldn't need to worry about this now. It's stopped -0b3
 
             if record.id not in self.executed_operation_table:
 

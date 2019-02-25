@@ -1,95 +1,48 @@
-from typing import Dict, List
+from typing import Dict
 from Pyro4.util import SerializerBase
-
 
 # https://stackoverflow.com/questions/4555932/public-or-private-attribute-in-python-what-is-the-best-way
 
 class Timestamp:
 
-    # What am I struggling with?!
-
     def __init__(self, replicas=None):
 
-        if replicas is None:
-            replicas = dict()
-
-        self.replicas: Dict[str, int] = replicas
+        self.replicas: Dict[str, int] = replicas if replicas is not None else dict()
 
     def __str__(self):
 
-        return str(self.to_dict())
+        return str(self.replicas)
 
     def __le__(self, other: 'Timestamp') -> bool:
 
-        return self < other or self == other
+        for (id, value) in other.replicas.items():
+
+            if id not in self.replicas:
+
+                self.replicas[id] = 0
+
+                if value > 0:
+
+                    return False
+
+            elif value < self.replicas[id]:
+
+                return False
+
+        for (id, value) in self.replicas.items():
+
+            if id not in other.replicas and value > 0:
+
+                return False
+
+        return True
 
     def __lt__(self, other: 'Timestamp') -> bool:
 
-        ids = set()
+        # That's a good point, after all: what does it mean for it to be sorted?
+        # It'd have to be in order for each replica, right?
 
-        ids.update(list(other.replicas.keys()))
-        ids.update(list(self.replicas.keys()))
-
-        for id in ids:
-
-            if id in self.replicas and id not in other.replicas:
-
-                if self.replicas.get(id) > 0:
-
-                    return False
-
-            if id in self.replicas and id in other.replicas:
-
-                if other.replicas.get(id) <= self.replicas.get(id):
-
-                    return False
-
-            if id not in self.replicas and id in other.replicas:
-
-                self.add(id)  # The id hasn't been seen before, so no updates have been read from it.
-
-                if other.replicas.get(id) > 0:
-                    return False
-
-        return True
-
-    def __contains__(self, id: str):
-
-        return id in self.replicas
-
-    def __eq__(self, other: 'Timestamp') -> bool:
-
-        for (id, value) in other.replicas.items():
-
-            if id not in self.replicas and value > 0:
-
-                return False
-
-            elif id in self.replicas and value != self.replicas[id]:
-
-                return False
-
-        return True
-
-    def set(self, i: str, value: int) -> None:
-
-        self.replicas[i] = value
-
-    def add(self, id: str) -> None:
-
-        self.replicas[id] = 0
-
-    def increment(self, id: str) -> None:
-
-        self.replicas[id] += 1
-
-    def get(self, i: str) -> int:
-
-        return self.replicas[i]
-
-    def __len__(self) -> int:
-
-        return len(self.replicas)
+        return self <= other
 
     def copy(self) -> 'Timestamp':
 
@@ -103,9 +56,9 @@ class Timestamp:
 
                 self.replicas[id] = value
 
-            elif value > self.replicas.get(id):
+            elif value > self.replicas[id]:
 
-                self.replicas[id] = ts.get(id)
+                self.replicas[id] = ts.replicas[id]
 
     def to_dict(self) -> Dict:
 

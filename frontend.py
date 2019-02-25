@@ -38,7 +38,7 @@ class Frontend(object):
         print("{0} added".format(id))
 
         self.replicas[id] = uri
-        self.prev.add(id)
+        self.prev.replicas[id] = 0
 
     def get_replica(self) -> Replica:
 
