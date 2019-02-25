@@ -1,33 +1,30 @@
 import queue
 import uuid
-from typing import List, Any
+from typing import List, Any, Dict
 from db import DB
 
 import Pyro4
-from requests import ClientRequest, FrontendRequest, Timestamp, ReplicaResponse, StabilityError
+from requests import ClientRequest, FrontendRequest, ReplicaResponse, StabilityError
+from timestamp import Timestamp
 
 from enums import Status, Method
-from record import Record, Log
+from replica_classes import Record, Log, Gossip
 
-# That was silly of me. I could just store it in an integer. OR: add the front-ends to the replica timestamp.
-# But it's from multiple front-ends: better, I just store the
-
-# Then: I could create the stuff in here.
 
 @Pyro4.expose
 class Replica(object):
 
     def __init__(self):
 
-        self.id = uuid.uuid4()
-
-        # It should, right?
+        self.id = "replica-" + str(uuid.uuid4())
+        self.value_timestamp = Timestamp({self.id: 0})
+        self.replica_timestamp = Timestamp({self.id: 0})
 
     value = DB()
     # The value of the application state as maintained by the RM. Each RM is a state machine, which begins with a
     # specified initial value and is thereafter solely the result of applying update operations to that state.
 
-    value_timestamp = Timestamp()
+    # value_timestamp = Timestamp()
     # Represents updates currently reflected in the value. Contains one entry for every entry manager, and is updated
     # whenever an update operation is applied to the value.
 
@@ -41,7 +38,7 @@ class Replica(object):
     # ordering guarantees OR, even though the update has become stable and has been applied to the value, the RM has not
     # received confirmation that this update has been received at all other RMs.
 
-    replica_timestamp = Timestamp()
+    # replica_timestamp = Timestamp()
     # Represents those updates that have been accepted by the RM (placed in the RM's update_log). Differs from the
     # value_timestamp because not all updates in the log are stable.
 
@@ -51,7 +48,7 @@ class Replica(object):
     # an update being applied twice, this table contains the unique FE IDs of updates that have been applied to the
     # value. The RM checks this table before adding an update to the log.
 
-    timestamp_table: List[Timestamp] = []
+    timestamp_table: Dict[str, Timestamp] = {}
     # Contains a vector timestamp for each other RM, derived from gossip messages.
 
     # Contains a vector timestamp for each other RM. Fill with timestamps from gossip messages ("updates")
@@ -62,8 +59,6 @@ class Replica(object):
     # Used to establish whether an update has been applied to all RMs.
 
     hold_back: queue.Queue = queue.Queue()
-
-
 
     def query(self, query: FrontendRequest) -> ReplicaResponse:
 
@@ -97,9 +92,17 @@ class Replica(object):
 
         if id not in self.executed_operation_table:
 
-            if self.in_update_log(id) is False:
+            print("id not in XO table")
+
+            if id not in self.update_log:
+
+                print("id not in update log")
 
                 if prev <= self.value_timestamp:
+
+                    # So we're failing at this comparison. Why? I'm passing the wrong thing, somewhere...
+
+                    print("Passed prev check")
 
                     self.replica_timestamp.increment(self.id)
 
@@ -112,9 +115,13 @@ class Replica(object):
 
                     result = self.apply_update(log)
 
+                    print("Update result:", result)
+
                     return ReplicaResponse(result, self.value_timestamp)
 
                 else:
+
+                    # We've got an error boss!
 
                     self.chat_shit()
 
@@ -140,19 +147,30 @@ class Replica(object):
 
             raise StabilityError
 
-    def gossip(self, gossip, id):
+    def gossip(self, gossip: Gossip, id):
 
-        print("Gossip received from an RM")
+        # *sigh* hasn't been deserialised properly. Who knows why.
+
+        print(type(gossip))
+
+        print("{0} gossiped {1}".format(id, gossip))
 
         log: Log = gossip.log
         ts: Timestamp = gossip.ts
 
-        # We're not merging a single log.
+        print("Merging update log")
 
         self.update_log.merge(log, self.replica_timestamp)
+
+        print("Merging replica timestamp")
+
         self.replica_timestamp.merge(ts)
 
+        print("Getting stable records")
+
         stable: List[Record] = self.update_log.stable(self.replica_timestamp)
+
+        # No stable records. But why?
 
         for record in stable:
 
@@ -160,16 +178,40 @@ class Replica(object):
 
             self.timestamp_table[id] = ts
 
+            # But what do I do here?!
+
             # TODO: discard logs
             # TODO: eliminate executed operation entries
 
     def chat_shit(self):
 
+        print("Gossip...")
+
         ns = Pyro4.locateNS()
 
         replicas = ns.list(metadata_all={"resource:replica"})
 
-        print("Chatting shit to: ", replicas)
+        # Shouldn't that make it a serialisation error? Let's restructure now, shall we?
+
+        gossip = Gossip(self.update_log, self.replica_timestamp)
+
+        for (name, uri) in replicas.items():
+
+            if name != self.id:
+
+                print("Gossiping with", name, end="...\n")
+
+                replica: Replica = Pyro4.Proxy(uri)
+
+                replica.gossip(gossip, self.id)
+
+                # Only seemed to work with the latter.
+
+            # Once I've chatted shit... try again? I need to tell everyone that I've received their gossip, right?
+
+        # Ah. I can trust that the operation has been run, and it's an update, so I don't return anything! Of course it fucking hangs!
+
+        print("Finished gossiping", end="\n\n")
 
     def get_status(self) -> Status:
 
@@ -197,10 +239,6 @@ class Replica(object):
 
         return value
 
-    # Okay, we're getting there.
-    # There's no way that this will run.
-    # Let's get it running before I head off to powerlifting.
-
 
 if __name__ == '__main__':
 
@@ -214,16 +252,19 @@ if __name__ == '__main__':
     replica = Replica()
 
     uri = daemon.register(replica)
-    name = "replica-" + str(replica.id)
-    ns.register(name, uri, metadata={"resource:replica"})
+    ns.register(replica.id, uri, metadata={"resource:replica"})
 
-    print("{0} running".format(name), end="\n\n")
+    print("{0} running".format(replica.id), end="\n\n")
 
     frontends = ns.list(metadata_all={"resource:frontend"})
 
     for (fe_name, fe_uri) in frontends.items():
 
         frontend = Pyro4.Proxy(fe_uri)
-        frontend.add_replica(name, uri, replica.id)
+        frontend.add_replica(replica.id, uri)
+
+        # print("{0} registered with {1}".format(replica.id, frontend.id))
+
+    print("\n")
 
     daemon.requestLoop()

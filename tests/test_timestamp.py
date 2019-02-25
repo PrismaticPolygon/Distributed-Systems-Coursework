@@ -1,4 +1,4 @@
-from requests import Timestamp
+from timestamp import Timestamp
 import unittest
 
 
@@ -21,17 +21,45 @@ class InitTest(unittest.TestCase):
 
 class LessThanOrEqualToTest(unittest.TestCase):
 
-    def test_less_than_or_equal_to_true(self):
+    def test_1(self):
 
         t1 = Timestamp({"id": 0})
         t2 = Timestamp({"id": 1})
 
         self.assertTrue(t1 <= t2)
 
-    def test_less_than_or_equal_to_false(self):
+    def test_2(self):
 
         t1 = Timestamp({"id": 1})
         t2 = Timestamp({"id": 0})
+
+        self.assertFalse(t1 <= t2)
+
+    def test_id_not_in_ts(self):
+
+        t1 = Timestamp({"id": 1})
+        t2 = Timestamp()
+
+        self.assertFalse(t1 <= t2)
+
+    def test_id_not_in_ts_but_equal(self):
+
+        t1 = Timestamp({"id": 0})
+        t2 = Timestamp()
+
+        self.assertTrue(t1 <= t2)
+
+    def test_id_in_other(self):
+
+        t1 = Timestamp()
+        t2 = Timestamp({"id": 0})
+
+        self.assertTrue(t1 <= t2)
+
+    def test_id_in_other_but_greater(self):
+
+        t1 = Timestamp()
+        t2 = Timestamp({"id": 1})
 
         self.assertFalse(t1 <= t2)
 

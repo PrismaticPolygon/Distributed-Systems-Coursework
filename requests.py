@@ -3,121 +3,13 @@ from typing import Dict, Any
 from Pyro4.util import SerializerBase
 import Pyro4
 import uuid
+from timestamp import Timestamp
 
 Pyro4.config.SERIALIZER = "serpent"
 
 
 class StabilityError(Exception):
     pass
-
-
-class Timestamp:
-
-    def __init__(self, replicas=None):
-
-        if replicas is None:
-
-            replicas = dict()
-
-        self.replicas: Dict[str, int] = replicas
-        self.frontend_updates = 0
-
-    def __str__(self):
-
-        return str(self.replicas)
-
-    def __le__(self, other: 'Timestamp') -> bool:
-
-        for (id, value) in self.replicas.items():
-
-            if id in other:
-
-                if value > other.get(id):
-
-                    return False
-
-        return True
-
-    def __lt__(self, other: 'Timestamp') -> bool:
-
-        for (id, value) in self.replicas.items():
-
-            if id in other:
-
-                if value >= other.get(id):
-
-                    return False
-
-        return True
-
-    def __contains__(self, id: str):
-
-        return id in self.replicas
-
-    def __eq__(self, other) -> bool:
-
-        for (id, value) in self.replicas.items():
-
-            if other.get(id) != value:
-
-                return False
-
-        return True
-
-    def set(self, i: str, value: int) -> None:
-
-        self.replicas[i] = value
-
-    def add(self, id: str):
-
-        self.replicas[id] = 0
-
-    def increment(self, id: str) -> None:
-
-        self.replicas[id] += 1
-
-    def get(self, i: str) -> int:
-
-        return self.replicas[i]
-
-    def size(self) -> int:
-
-        return len(self.replicas)
-
-    def copy(self) -> 'Timestamp':
-
-        return Timestamp(self.replicas.copy())
-
-    def merge(self, ts: 'Timestamp') -> None:
-
-        for (id, value) in ts.replicas.items():
-
-            if id not in self.replicas:
-
-                self.replicas[id] = value
-
-            elif value > self.replicas.get(id):
-
-                self.replicas[id] = ts.get(id)
-
-
-def timestamp_to_dict(timestamp: Timestamp) -> Dict:
-
-    print("Serialising timestamp")
-
-    return {
-        "__class__": "FrontendRequest",
-        "replicas": timestamp.replicas
-    }
-
-
-def dict_to_timestamp(classname: str, timestamp: Dict) -> Timestamp:
-
-    print("Deserialising frontend request:", timestamp)
-
-    return Timestamp(
-        timestamp["replicas"]
-    )
 
 
 class ClientRequest:
@@ -129,31 +21,23 @@ class ClientRequest:
 
     def __str__(self):
 
-        return str({
+        return str(self.to_dict())
+
+    def to_dict(self):
+
+        return {
+            "__class__": "ClientRequest",
             "method": self.method,
             "params": self.params
-        })
+        }
 
+    @staticmethod
+    def from_dict(classname: str, dict: Dict):
 
-def client_request_to_dict(client_request: ClientRequest):
-
-    print("Serialising client request")
-
-    return {
-        "__class__": "ClientRequest",
-        "method": client_request.method,
-        "params": client_request.params
-    }
-
-
-def dict_to_client_request(classname: str, client_request: Dict) -> ClientRequest:
-
-    print("Deserialising client request")
-
-    return ClientRequest(
-        Method(client_request["method"]),
-        client_request["params"]
-    )
+        return ClientRequest(
+            Method(dict["method"]),
+            dict["params"]
+        )
 
 
 class FrontendRequest:
@@ -162,49 +46,38 @@ class FrontendRequest:
 
         if id is None:
 
-            self.id = uuid.uuid4()
+            id = str(uuid.uuid4())
 
-        else:
-
-            self.id = uuid.UUID(id)
-
+        self.id = id
         self.prev = prev
         self.request = request
         self.operation = operation
 
     def __str__(self):
 
-        return str({
-            "prev": str(self.prev),
-            "request": str(self.request),
-            "operation": str(self.operation),
-            "id": str(self.id)
-        })
+        return str(self.to_dict())
 
+    def to_dict(self):
 
-def frontend_request_to_dict(frontend_request: FrontendRequest) -> Dict:
+        return {
+            "__class__": "FrontendRequest",
+            "prev": self.prev.to_dict(),
+            "request": self.request.to_dict(),
+            "operation": self.operation,
+            "id": self.id
+        }
 
-    print("Serialising frontend request")
+    @staticmethod
+    def from_dict(classname: str, dict: Dict):
 
-    return {
-        "__class__": "FrontendRequest",
-        "id": str(frontend_request.id),
-        "prev": timestamp_to_dict(frontend_request.prev),
-        "request": client_request_to_dict(frontend_request.request),
-        "operation": frontend_request.operation
-    }
+        return FrontendRequest(
+            Timestamp.from_dict("Timestamp", dict["prev"]),
+            ClientRequest.from_dict("ClientRequest", dict["request"]),
+            dict["operation"],
+            dict["id"]
+        )
 
-
-def dict_to_frontend_request(classname: str, frontend_request: Dict) -> FrontendRequest:
-
-    print("Deserialising frontend request:", frontend_request)
-
-    return FrontendRequest(
-        dict_to_timestamp("Timestamp", frontend_request["prev"]),
-        dict_to_client_request("ClientRequest", frontend_request["request"]),
-        Operation(frontend_request["operation"]),
-        frontend_request["id"]
-    )
+# I can have dictionaries of as many layers as I like, I suppose. Just nothing more complicated.
 
 
 class ReplicaResponse:
@@ -213,36 +86,34 @@ class ReplicaResponse:
 
         self.value = value
         self.label = label
-        
-        
-def replica_response_to_dict(replica_response: ReplicaResponse):
-    
-    return {
-        "__class__": "ReplicaResponse",
-        "value": replica_response.value,
-        "label": timestamp_to_dict(replica_response.label)
-    }
-    
-def dict_to_replica_response(classname: str, replica_response: Dict):
-    
-    return ReplicaResponse(
-        replica_response["value"],
-        dict_to_timestamp("Timestamp", replica_response["label"])
-    )
-    
-    
 
-print("Registering serialiser hooks")
+    def __str__(self):
 
-SerializerBase.register_class_to_dict(ClientRequest, client_request_to_dict)
-SerializerBase.register_dict_to_class("ClientRequest", dict_to_client_request)
+        return str(self.to_dict())
 
-SerializerBase.register_class_to_dict(FrontendRequest, frontend_request_to_dict)
-SerializerBase.register_dict_to_class("FrontendRequest", dict_to_frontend_request)
+    def to_dict(self):
 
-SerializerBase.register_class_to_dict(Timestamp, timestamp_to_dict)
-SerializerBase.register_dict_to_class("Timestamp", dict_to_timestamp)
+        return {
+            "__class__": "ReplicaResponse",
+            "value": self.value,
+            "label": self.label.to_dict()
+        }
 
-SerializerBase.register_class_to_dict(ReplicaResponse, replica_response_to_dict)
-SerializerBase.register_dict_to_class("ReplicaResponse", dict_to_replica_response)
+    @staticmethod
+    def from_dict(classname: str, dict: Dict):
+
+        return ReplicaResponse(
+            dict["value"],
+            Timestamp.from_dict("Timestamp", dict["label"])
+        )
+
+
+SerializerBase.register_class_to_dict(ClientRequest, ClientRequest.to_dict)
+SerializerBase.register_dict_to_class("ClientRequest", ClientRequest.from_dict)
+
+SerializerBase.register_class_to_dict(FrontendRequest, FrontendRequest.to_dict)
+SerializerBase.register_dict_to_class("FrontendRequest", FrontendRequest.from_dict)
+
+SerializerBase.register_class_to_dict(ReplicaResponse, ReplicaResponse.to_dict)
+SerializerBase.register_dict_to_class("ReplicaResponse", ReplicaResponse.from_dict)
 

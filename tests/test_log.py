@@ -1,4 +1,4 @@
-from record import Log, Record
+from replica_classes import Log, Record
 from requests import Timestamp, ClientRequest
 from enums import Method
 import unittest
@@ -16,13 +16,13 @@ class InTest(unittest.TestCase):
 
         log.add(self.record)
 
-        self.assertTrue(self.record in log)
+        self.assertTrue("0" in log)
 
     def test_in_false(self):
 
         log = Log()
 
-        self.assertFalse(self.record in log)
+        self.assertFalse("0" in log)
 
 
 class MergeTest(unittest.TestCase):
@@ -41,7 +41,7 @@ class MergeTest(unittest.TestCase):
 
         log_1.merge(log_2, self.replica_ts)
 
-        self.assertTrue(record in log_1)
+        self.assertTrue("1" in log_1)
 
     def test_merge_false(self):
 
@@ -52,7 +52,7 @@ class MergeTest(unittest.TestCase):
 
         log_1.merge(log_2, self.replica_ts)
 
-        self.assertFalse(record in log_1)
+        self.assertFalse("1" in log_1)
 
 
 class StableTest(unittest.TestCase):

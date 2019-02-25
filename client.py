@@ -44,7 +44,7 @@ if __name__ == "__main__":
                 elif operation == "UPDATE":
 
                     method = Method.UPDATE
-                    params["rating_id"] = input("Please enter a rating ID: ").strip()
+                    params["rating"] = input("Please enter a new rating: ").strip()
                     params["user_id"] = 1
 
                 request = ClientRequest(method, params)

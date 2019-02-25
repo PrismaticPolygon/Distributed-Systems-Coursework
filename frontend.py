@@ -4,15 +4,22 @@ import Pyro4
 
 from enums import Status, Operation, Method
 from replica import Replica
-from requests import ClientRequest, FrontendRequest, ReplicaResponse, Timestamp
+from requests import ClientRequest, FrontendRequest, ReplicaResponse
+from timestamp import Timestamp
 
 
+@Pyro4.expose
 @Pyro4.behavior(instance_mode="single")
 class Frontend(object):
 
+    @Pyro4.expose
+    @property
+    def attr(self):
+        return self.id
+
     def __init__(self):
 
-        self.id = uuid.uuid4()
+        self.id = "frontend-" + str(uuid.uuid4())
 
         # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
         # rather than every operation an FE performs.
@@ -26,17 +33,20 @@ class Frontend(object):
         # of the replicated data observed by the client.
         self.prev = Timestamp()
 
-    @Pyro4.expose
-    def add_replica(self, name, uri, id) -> None:
+    def add_replica(self, name, uri) -> None:
 
-        print("Replica added", (name, uri))
+        print("{0} added".format(name))
+
+        # Do I actually need my replicas? Not if I have my prev list. Wait, I do need the URIs.
 
         self.replicas[name] = uri
-        self.prev.add(id)
+        self.prev.add(name)
 
     def get_replica(self) -> Replica:
 
         print("Getting replica... ")
+
+        # Ah, replicas aren't adding themselves..
 
         overloaded = None
 
@@ -72,31 +82,37 @@ class Frontend(object):
     @Pyro4.expose
     def request(self, request: ClientRequest):
 
-        print("\nRequest received:", request, type(request))
+        print("\n{0} requested...".format(request))
 
-        replica: Replica = self.get_replica()
+        try:
 
-        if request.method is Method.READ:
+            replica: Replica = self.get_replica()
 
-            print("Sending query...")
+            if request.method is Method.READ:
 
-            query: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
+                print("Sending query...")
 
-            response: ReplicaResponse = replica.query(query)
+                query: FrontendRequest = FrontendRequest(self.prev, request, Operation.QUERY)
 
-        else:
+                response: ReplicaResponse = replica.query(query)
 
-            print("Sending update...")
+            else:
 
-            update: FrontendRequest = FrontendRequest(self.prev, request, Operation.UPDATE)
+                print("Sending update...")
 
-            response: ReplicaResponse = replica.update(update)
+                update: FrontendRequest = FrontendRequest(self.prev, request, Operation.UPDATE)
 
-        print(response)
+                response: ReplicaResponse = replica.update(update)
 
-        self.prev = response.label
+            print(response)
 
-        return response.value
+            self.prev = response.label
+
+            return response.value
+
+        except ConnectionRefusedError:
+
+            return "All replicas offline"
 
     def handle_replica_response(self, response: ReplicaResponse):
 
@@ -113,8 +129,8 @@ if __name__ == '__main__':
 
     uri = daemon.register(frontend)
 
-    print("Frontend created at", uri, end="\n\n")
+    print("{0} running".format(frontend.id), end="\n\n")
 
-    ns.register("frontend-" + str(frontend.id), uri, metadata={"resource:frontend"})
+    ns.register(frontend.id, uri, metadata={"resource:frontend"})
 
     daemon.requestLoop()
