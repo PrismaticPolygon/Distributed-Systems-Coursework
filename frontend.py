@@ -1,7 +1,5 @@
 import uuid
-
 import Pyro4
-
 from enums import Status, Method
 from replica import Replica
 from requests import ClientRequest, FrontendRequest, ReplicaResponse
@@ -9,17 +7,16 @@ from timestamp import Timestamp
 
 
 @Pyro4.expose
-@Pyro4.behavior(instance_mode="single")
 class Frontend(object):
 
     @Pyro4.expose
     @property
-    def attr(self):
-        return self.id
+    def id(self):
+        return self._id
 
     def __init__(self):
 
-        self.id = "frontend-" + str(uuid.uuid4())
+        self._id = "frontend-" + str(uuid.uuid4())
 
         # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
         # rather than every operation an FE performs.
@@ -42,16 +39,12 @@ class Frontend(object):
 
     def get_replica(self) -> Replica:
 
-        # print("Getting replica... ")
-
         overloaded = None
 
         for (name, uri) in self.replicas.items():
 
             replica: Replica = Pyro4.Proxy(uri)
             status: Status = Status(replica.get_status())
-
-            # print(name + " reporting status:", status, end="...\n")
 
             if status is Status.ACTIVE:
 
@@ -84,7 +77,7 @@ class Frontend(object):
 
                 query: FrontendRequest = FrontendRequest(self.prev, request)
 
-                print("Sent {0}...".format(self.prev))
+                print("Sent {0}".format(self.prev))
 
                 response: ReplicaResponse = replica.query(query)
 
@@ -92,11 +85,11 @@ class Frontend(object):
 
                 update: FrontendRequest = FrontendRequest(self.prev, request)
 
-                print("Sent {0}...".format(self.prev))
+                print("Sent {0}".format(self.prev))
 
                 response: ReplicaResponse = replica.update(update)
 
-            print("Got  {0}...".format(response.label))
+            print("Got  {0}".format(response.label))
 
             self.prev = response.label
 
@@ -116,6 +109,8 @@ if __name__ == '__main__':
     frontend = Frontend()
 
     uri = daemon.register(frontend)
+
+    # So this is erroring without reporting it!
 
     print("{0} running".format(frontend.id), end="\n\n")
 

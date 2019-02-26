@@ -1,29 +1,32 @@
 from enums import Method
 from typing import Dict, Any
 from Pyro4.util import SerializerBase
-import Pyro4
 import uuid
 from timestamp import Timestamp
 
-Pyro4.config.SERIALIZER = "serpent"
-
 
 class ClientRequest:
+    """
+    Represents a request from a client to a FE.
+    """
 
     def __init__(self, method: Method, params: Dict):
 
-        self.method = method
-        self.params = params
+        self.method: Method = method    # The method (CREATE, READ, or UPDATE) specified by the client
+        self.params: Dict = params  # The params required to execute the request
 
     def __str__(self):
 
-        dict = self.to_dict()
-        dict["method"] = str(dict["method"])
-        del dict["__class__"]
+        return str({
+            "method": str(self.method),
+            "params": self.params
+        })
 
-        return str(dict)
-
-    def to_dict(self):
+    def to_dict(self) -> Dict:
+        """
+        Used for serpent serialisation
+        :return: A dict representing this ClientRequest
+        """
 
         return {
             "__class__": "ClientRequest",
@@ -33,6 +36,10 @@ class ClientRequest:
 
     @staticmethod
     def from_dict(classname: str, dict: Dict):
+        """
+        Used for serpent deserialisation
+        :return: A ClientRequest
+        """
 
         return ClientRequest(
             Method(dict["method"]),
@@ -41,22 +48,28 @@ class ClientRequest:
 
 
 class FrontendRequest:
+    """
+    Represents a request from a FE to a RM.
+    """
 
     def __init__(self, prev: Timestamp, request: ClientRequest, id: str=None):
 
-        if id is None:
-
-            id = str(uuid.uuid4())
-
-        self.id = id
+        self.id = id if id is not None else str(uuid.uuid4())
         self.prev = prev
         self.request = request
 
     def __str__(self):
 
-        return str(self.to_dict())
+        dict = self.to_dict()
+        del dict["__class__"]
 
-    def to_dict(self):
+        return str(dict)
+
+    def to_dict(self) -> Dict:
+        """
+        Used for serpent serialisation
+        :return: A dict representing this FrontendRequest
+        """
 
         return {
             "__class__": "FrontendRequest",
@@ -66,7 +79,11 @@ class FrontendRequest:
         }
 
     @staticmethod
-    def from_dict(classname: str, dict: Dict):
+    def from_dict(classname: str, dict: Dict) -> 'FrontendRequest':
+        """
+        Used for serpent deserialisation
+        :return: A FrontendRequest
+        """
 
         return FrontendRequest(
             Timestamp.from_dict("Timestamp", dict["prev"]),
@@ -74,21 +91,29 @@ class FrontendRequest:
             dict["id"]
         )
 
-# I can have dictionaries of as many layers as I like, I suppose. Just nothing more complicated.
-
 
 class ReplicaResponse:
+    """
+    Represents a response to a FrontendRequest from a RM to a FE
+    """
 
     def __init__(self, value: Any, label: Timestamp):
 
-        self.value = value
-        self.label = label
+        self.value = value  # The value of the executed request. None if an update.
+        self.label = label  # The value Timestamp of the RM that executed the request
 
     def __str__(self):
 
-        return str(self.to_dict())
+        dict = self.to_dict()
+        del dict["__class__"]
+
+        return str(dict)
 
     def to_dict(self):
+        """
+        Used for serpent serialisation
+        :return: A dict representing this ReplicaResponse
+        """
 
         return {
             "__class__": "ReplicaResponse",
@@ -98,6 +123,10 @@ class ReplicaResponse:
 
     @staticmethod
     def from_dict(classname: str, dict: Dict):
+        """
+        Used for serpent deserialisation
+        :return: A ReplicaResponse
+        """
 
         return ReplicaResponse(
             dict["value"],

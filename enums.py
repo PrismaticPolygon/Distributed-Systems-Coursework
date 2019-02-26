@@ -3,7 +3,10 @@ from enum import Enum
 
 
 class EnumProperty(object):
-    # https://stackoverflow.com/questions/47353555/how-to-get-random-value-of-attribute-of-enum-on-each-iteration#47354673
+    """
+    Used to get a random value from an enum. Taken from:
+    https://stackoverflow.com/questions/47353555/how-to-get-random-value-of-attribute-of-enum-on-each-iteration#47354673
+    """
 
     def __init__(self, fget):
         self.fget = fget
@@ -21,9 +24,11 @@ class EnumProperty(object):
 
 
 class Status(Enum):
+    """Represents the status of a RM"""
+
     ACTIVE = "ACTIVE"
     OVERLOADED = "OVERLOADED"
-    # OFFLINE = "OFFLINE"
+    OFFLINE = "OFFLINE"
 
     @EnumProperty
     def random(self):
@@ -31,6 +36,8 @@ class Status(Enum):
 
 
 class Method(Enum):
+    """Represents the type of operation requested by the client"""
+
     CREATE = "CREATE"
     READ = "READ"
     UPDATE = "UPDATE"

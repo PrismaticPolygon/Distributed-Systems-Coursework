@@ -3,6 +3,8 @@ from requests import ClientRequest
 from enums import Method
 
 
+# Most of the remaining work is now in the client!
+
 if __name__ == "__main__":
 
     print("Getting frontend...")
@@ -53,3 +55,8 @@ if __name__ == "__main__":
                 response = frontend.request(request)
 
                 print("Received {0}".format(response), end="\n\n")
+
+
+# Handle ConnectionClosedError
+
+# Handle CommunicationError?

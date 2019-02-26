@@ -14,7 +14,9 @@ class InTest(unittest.TestCase):
 
         log = Log()
 
-        log.add(self.record)
+        log += self.record
+
+        # None type? Do I have to return the object?
 
         self.assertTrue("id" in log)
 

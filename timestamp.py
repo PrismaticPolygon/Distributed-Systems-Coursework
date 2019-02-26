@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 from Pyro4.util import SerializerBase
 
 # https://stackoverflow.com/questions/4555932/public-or-private-attribute-in-python-what-is-the-best-way
@@ -36,6 +36,37 @@ class Timestamp:
                 return False
 
         return True
+
+    # It's really not that clear, though, and it'd be hard to check. I'll extract this, and deal with it later.
+    # __le__ then can just check the length of this list. Smart, huh?
+
+    # No type 'merge' apparently I'm redi
+
+    def lt(self, other: 'Timestamp'):
+
+        lt = []
+
+        def inner(replica_id: str, value: int):
+
+            if replica_id not in self.replicas:
+
+                self.replicas[id] = 0
+
+                if value > 0:
+
+                    return True
+
+            elif value < self.replicas[replica_id]:
+
+                return False
+
+        for (id, value) in other.replicas.items():
+
+            if inner(id, value):
+
+                lt.append(id)
+
+        return lt
 
     def __lt__(self, other: 'Timestamp') -> bool:
 
