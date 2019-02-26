@@ -1,60 +1,102 @@
 import Pyro4
+from random import randint
+
+from enums import Operation
 from requests import ClientRequest
-from enums import Method
+from frontend import Frontend
+from Pyro4.errors import NamingError, CommunicationError
+import sys
 
 
-# Most of the remaining work is now in the client!
+class Client:
+
+    def __init__(self, id: int=None):
+
+        self.id: int = id if id is not None else randint(0, 611)
+        self.frontend_uri: Pyro4.URI = self.get_frontend_uri()
+
+    def get_frontend_uri(self) -> Frontend:
+
+        while True:
+
+            print("Getting frontend...")
+
+            try:
+
+                ns = Pyro4.locateNS()
+                frontends = ns.list(metadata_all={"resource:frontend"})
+
+                name, uri = next(iter(frontends.items()))
+
+                print("Using {0}".format(name), end="\n\n")
+
+                return uri
+
+            except NamingError as e:
+
+                print(e)
+
+            except CommunicationError as e:
+
+                print(e)
+
+            try_again = input("\nTry again? (Y/N): ").strip()
+
+            if try_again != "Y":
+
+                sys.exit()
+
+            print("")
+
+    def request(self):
+
+        params = {"user_id": self.id}
+
+        while True:
+
+            operation_input = input("Please enter an operation (CREATE/READ/UPDATE/DELETE): ").strip()
+
+            try:
+
+                operation = Operation(operation_input)
+                break
+
+            except ValueError:
+
+                print("Invalid operation entered\n")
+
+        params["movie_id"] = input("Please enter a movie ID: ").strip()
+
+        if operation is not Operation.READ:
+
+            params["rating"] = input("Please enter a rating: ").strip()
+
+        request = ClientRequest(operation, params)
+
+        print("Requesting {0}...".format(request))
+
+        with Pyro4.Proxy(self.frontend_uri) as frontend:
+
+            response = frontend.request(request)
+
+            print("Received {0}".format(response), end="\n\n")
+
 
 if __name__ == "__main__":
 
-    print("Getting frontend...")
+    client = Client(1)
 
-    ns = Pyro4.locateNS()
-    frontends = ns.list(metadata_all={"resource:frontend"})
+    while True:
 
-    if len(frontends) is 0:
+        client.request()
 
-        print("No frontends available")
+        try_again = input("Again? (Y/N): ").strip()
 
-    else:
+        if try_again != "Y":
 
-        name, uri = next(iter(frontends.items()))
+            break
 
-        print("Using {0}".format(name), end="\n\n")
-
-        with Pyro4.Proxy(uri) as frontend:
-
-            params = {}
-            method = None
-
-            while True:
-
-                operation = input("Please enter an operation: (CREATE/READ/UPDATE): ").strip()
-                params["movie_id"] = input("Please enter a movie ID: ").strip()
-
-                if operation == "CREATE":
-
-                    method = Method.CREATE
-                    params["rating"] = input("Please enter a rating: ").strip()
-                    params["user_id"] = 1
-
-                elif operation == "READ":
-
-                    method = Method.READ
-
-                elif operation == "UPDATE":
-
-                    method = Method.UPDATE
-                    params["rating"] = input("Please enter a new rating: ").strip()
-                    params["user_id"] = 1
-
-                request = ClientRequest(method, params)
-
-                print("Requesting {0}...".format(request))
-
-                response = frontend.request(request)
-
-                print("Received {0}".format(response), end="\n\n")
+        print("")
 
 
 # Handle ConnectionClosedError

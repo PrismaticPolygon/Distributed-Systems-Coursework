@@ -1,5 +1,6 @@
-from timestamp import Timestamp
 import unittest
+
+from timestamp import Timestamp
 
 
 class InitTest(unittest.TestCase):

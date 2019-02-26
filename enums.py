@@ -35,9 +35,10 @@ class Status(Enum):
         return random.choice(list(self.__members__.values()))
 
 
-class Method(Enum):
+class Operation(Enum):
     """Represents the type of operation requested by the client"""
 
     CREATE = "CREATE"
     READ = "READ"
     UPDATE = "UPDATE"
+    DELETE = "DELETE"

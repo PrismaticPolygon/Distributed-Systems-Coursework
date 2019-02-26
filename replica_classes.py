@@ -1,7 +1,9 @@
 from typing import List, Dict
-from timestamp import Timestamp
-from requests import ClientRequest
+
 from Pyro4.util import SerializerBase
+
+from requests import ClientRequest
+from timestamp import Timestamp
 
 
 class Record:

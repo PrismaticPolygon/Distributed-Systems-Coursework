@@ -1,15 +1,13 @@
 import uuid
-from typing import List, Any, Dict
-from db import DB
+from typing import List, Dict
 
 import Pyro4
+
+from db import DB
+from enums import Status
+from replica_classes import Record, Log
 from requests import ClientRequest, FrontendRequest, ReplicaResponse
 from timestamp import Timestamp
-
-from enums import Status, Method
-from replica_classes import Record, Log
-
-# At the moment I'm enforcing immediate update operations if I don't have the right stuff.
 
 
 @Pyro4.expose
@@ -36,9 +34,7 @@ class Replica(object):
     def __init__(self):
 
         self._id = "replica-" + str(uuid.uuid4())
-
-        self._replicas = dict()
-
+        self._replicas: Dict[str, Pyro4.URI] = dict()
 
         # Represents updates currently reflected in the value. Contains one entry for every replica manager, and is
         # updated whenever an update operation is applied to the value.
@@ -48,7 +44,9 @@ class Replica(object):
         # value_timestamp because not all updates in the log are stable.
         self._replica_timestamp = Timestamp({self.id: 0})
 
-    value = DB()
+        self.ns = Pyro4.locateNS()
+
+    db = DB()
     # The value of the application state as maintained by the RM. Each RM is a state machine, which begins with a
     # specified initial value and is thereafter solely the result of applying update operations to that state.
 
@@ -61,8 +59,6 @@ class Replica(object):
     # value. The RM checks this table before adding an update to the log.
 
     timestamp_table: Dict[str, Timestamp] = {}
-    # Contains a vector timestamp for each other RM, derived from gossip messages.
-
     # Contains a vector timestamp for each other RM. Fill with timestamps from gossip messages ("updates")
     # Used to determine whether a log record is known everywhere
     # Every gossip message contains the timestamp of its sender
@@ -82,7 +78,7 @@ class Replica(object):
 
             self.gossip(prev)
 
-        result = self.execute_client_request(request)
+        result = self.db.execute_request(request)
 
         # Don't like execute_client_request here.
 
@@ -123,7 +119,7 @@ class Replica(object):
 
     def apply_update(self, record: Record) -> None:
 
-        self.execute_client_request(record.request)
+        self.db.execute_request(record.request)
         self.value_timestamp.merge(record.ts)
         self.executed_operation_table.append(record.id)
 
@@ -131,32 +127,9 @@ class Replica(object):
 
         return Status.random
 
-    def execute_client_request(self, request: ClientRequest):
-
-        print("Executing client request", request)
-
-        method: Method = request.method
-        params = request.params
-        value = None
-
-        if method == Method.CREATE:
-
-            self.value.create(**params)
-
-        elif method == Method.READ:
-
-            value = self.value.read(**params)
-
-        elif method == Method.UPDATE:
-
-            self.value.update(**params)
-
-        return value
-
     def gossip(self, prev: Timestamp):
 
         replicas_with_required_updates = self._replica_timestamp.lt(prev)
-        ns = None
 
         print("Need updates from", replicas_with_required_updates)
 
@@ -164,48 +137,48 @@ class Replica(object):
 
             if replica_id in self._replicas:
 
-                replica: Replica = Pyro4.Proxy(self._replicas[replica_id])
+                uri = self._replicas[replica_id]
 
             else:
 
-                if ns is None:
-
-                    ns = Pyro4.locateNS()
-
-                uri = ns.lookup(replica_id)
+                uri = self.ns.lookup(replica_id)
                 self._replicas[replica_id] = uri
 
-                print("Found replica:", uri)
+            with Pyro4.Proxy(uri) as replica:
 
-                replica: Replica = Pyro4.Proxy(self._replicas[replica_id])
+                log: Log = replica.update_log
+                ts: Timestamp = replica.replica_timestamp
 
-            log: Log = replica.update_log
-            ts: Timestamp = replica.replica_timestamp
+                print("{0} gossiped {1}".format(replica.id, ts))
 
-            print("{0} gossiped {1}".format(replica.id, ts))
+                print("New records:", len(log.records))
 
-            print("New records:", len(log.records))
+                self._update_log.merge(log, self._replica_timestamp)
+                self._replica_timestamp.merge(ts)
 
-            self._update_log.merge(log, self._replica_timestamp)
-            self._replica_timestamp.merge(ts)
+                print("New replica timestamp:", self._replica_timestamp)
 
-            print("New replica timestamp:", self._replica_timestamp)
+                stable: List[Record] = self._update_log.stable(self._replica_timestamp)
 
-            stable: List[Record] = self._update_log.stable(self._replica_timestamp)
+                print("Stable:", stable)
 
-            print("Stable:", stable)
+                # It's almost like because my client connects first, they can't.
 
-            for record in stable:
+                for record in stable:
 
-                # Shouldn't need to worry about this now. It's stopped -0b3
+                    if record.id not in self.executed_operation_table:
 
-                if record.id not in self.executed_operation_table:
-                    self.apply_update(record)
+                        self.apply_update(record)
 
-                    self.timestamp_table[id] = ts
+                        self.timestamp_table[id] = ts
 
-                    # TODO: discard logs
-                    # TODO: eliminate executed operation entries
+                        # TODO: discard logs
+                        # TODO: eliminate executed operation entries
+
+# TODO: handle errors in replica, and gracefully shut down the process.
+
+# Okay: now we're fine. Weird. We had multiple of each. I SUSPECT it's because the classes holding others don't
+# delete then when they open then, essentially.
 
 
 if __name__ == '__main__':
@@ -213,21 +186,23 @@ if __name__ == '__main__':
     print("Creating replica...")
 
     daemon = Pyro4.Daemon()
-    ns = Pyro4.locateNS()
     replica = Replica()
 
     uri = daemon.register(replica)
-    ns.register(replica.id, uri, metadata={"resource:replica"})
+    replica.ns.register(replica.id, uri, metadata={"resource:replica"})
 
-    frontends = ns.list(metadata_all={"resource:frontend"})
+    frontends = replica.ns.list(metadata_all={"resource:frontend"})
 
     for (fe_name, fe_uri) in frontends.items():
 
-        frontend = Pyro4.Proxy(fe_uri)
-        frontend.add_replica(replica.id, uri)
+        with Pyro4.Proxy(fe_uri) as frontend:
 
-        print("{0} registering with {1}".format(replica.id, frontend.id))
+            frontend.register_replica(replica.id, uri)
+
+            print("Registering with {0}...".format(frontend.id))
 
     print("{0} running".format(replica.id), end="\n\n")
 
     daemon.requestLoop()
+
+    # I suspect I'm not actually closing my loops./

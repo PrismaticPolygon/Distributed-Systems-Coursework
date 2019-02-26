@@ -1,5 +1,7 @@
-from typing import Dict, List
+from typing import Dict
+
 from Pyro4.util import SerializerBase
+
 
 # https://stackoverflow.com/questions/4555932/public-or-private-attribute-in-python-what-is-the-best-way
 

@@ -1,7 +1,9 @@
-from enums import Method
-from typing import Dict, Any
-from Pyro4.util import SerializerBase
 import uuid
+from typing import Dict, Any
+
+from Pyro4.util import SerializerBase
+
+from enums import Operation
 from timestamp import Timestamp
 
 
@@ -10,9 +12,9 @@ class ClientRequest:
     Represents a request from a client to a FE.
     """
 
-    def __init__(self, method: Method, params: Dict):
+    def __init__(self, method: Operation, params: Dict):
 
-        self.method: Method = method    # The method (CREATE, READ, or UPDATE) specified by the client
+        self.method: Operation = method    # The method (CREATE, READ, or UPDATE) specified by the client
         self.params: Dict = params  # The params required to execute the request
 
     def __str__(self):
@@ -42,7 +44,7 @@ class ClientRequest:
         """
 
         return ClientRequest(
-            Method(dict["method"]),
+            Operation(dict["method"]),
             dict["params"]
         )
 

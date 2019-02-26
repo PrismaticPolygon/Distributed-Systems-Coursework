@@ -1,6 +1,9 @@
 import uuid
+
 import Pyro4
-from enums import Status, Method
+from typing import Dict, Any
+
+from enums import Status, Operation
 from replica import Replica
 from requests import ClientRequest, FrontendRequest, ReplicaResponse
 from timestamp import Timestamp
@@ -20,7 +23,7 @@ class Frontend(object):
 
         # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
         # rather than every operation an FE performs.
-        self.replicas = dict()
+        self.replicas: Dict[str, Pyro4.URI] = dict()
 
         # Reflects the version of the latest data values accessed by the FE. Contains an entry for every RM. Sent by the
         # FE in every request message to an RM, together with a description of the query or update operation itself.
@@ -30,70 +33,69 @@ class Frontend(object):
         # of the replicated data observed by the client.
         self.prev = Timestamp()
 
-    def add_replica(self, id, uri) -> None:
+    def register_replica(self, id, uri) -> None:
 
-        print("{0} added".format(id))
+        print("{0} registered".format(id))
 
         self.replicas[id] = uri
         self.prev.replicas[id] = 0
 
-    def get_replica(self) -> Replica:
+    def get_replica_uri(self) -> Replica:
 
         overloaded = None
 
         for (name, uri) in self.replicas.items():
 
-            replica: Replica = Pyro4.Proxy(uri)
-            status: Status = Status(replica.get_status())
+            with Pyro4.Proxy(uri) as replica:
 
-            if status is Status.ACTIVE:
+                status: Status = Status(replica.get_status())
 
-                print("Using {0} ({1})".format(name, status), end="\n\n")
+                if status is Status.ACTIVE:
 
-                return replica
+                    print("Using {0} ({1})".format(name, status), end="\n\n")
 
-            elif status is Status.OVERLOADED:
+                    return uri
 
-                overloaded = (name, uri, status, replica)
+                elif status is Status.OVERLOADED:
+
+                    overloaded = (name, uri, status)
 
         if overloaded is not None:
 
             print("Using {0} ({1})".format(overloaded[0], overloaded[2]), end="\n\n")
 
-            return overloaded[3]
+            return overloaded[1]
 
         raise ConnectionRefusedError("All replicas offline")
 
     @Pyro4.expose
-    def request(self, request: ClientRequest):
+    def request(self, request: ClientRequest) -> Any:
 
         print("\n{0} requested...".format(request))
 
         try:
 
-            replica: Replica = self.get_replica()
+            uri = self.get_replica_uri()
 
-            if request.method is Method.READ:
+            with Pyro4.Proxy(uri) as replica:
 
-                query: FrontendRequest = FrontendRequest(self.prev, request)
+                frontend_request: FrontendRequest = FrontendRequest(self.prev, request)
 
-                print("Sent {0}".format(self.prev))
+                print("Requesting {0}...".format(self.prev))
 
-                response: ReplicaResponse = replica.query(query)
+                if request.method is Operation.READ:
 
-            else:
+                    response: ReplicaResponse = replica.query(frontend_request)
 
-                update: FrontendRequest = FrontendRequest(self.prev, request)
+                else:
 
-                print("Sent {0}".format(self.prev))
+                    response: ReplicaResponse = replica.update(frontend_request)
 
-                response: ReplicaResponse = replica.update(update)
+                print("Received: {0}".format(response.label))
 
-            print("Got  {0}".format(response.label))
+                self.prev = response.label
 
-            self.prev = response.label
-
-            return response.value
+                return response.value
 
         except ConnectionRefusedError:
 
@@ -109,8 +111,6 @@ if __name__ == '__main__':
     frontend = Frontend()
 
     uri = daemon.register(frontend)
-
-    # So this is erroring without reporting it!
 
     print("{0} running".format(frontend.id), end="\n\n")
 

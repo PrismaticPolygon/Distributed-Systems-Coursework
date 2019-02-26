@@ -1,14 +1,15 @@
+import unittest
+
+from enums import Operation
 from replica_classes import Log, Record
 from requests import Timestamp, ClientRequest
-from enums import Method
-import unittest
 
 
 class InTest(unittest.TestCase):
 
     def setUp(self):
 
-        self.record = Record("0", Timestamp(), ClientRequest(Method.READ, {}), Timestamp(), "id")
+        self.record = Record("0", Timestamp(), ClientRequest(Operation.READ, {}), Timestamp(), "id")
 
     def test_in_true(self):
 
@@ -31,8 +32,8 @@ class MergeTest(unittest.TestCase):
 
     def setUp(self):
 
-        self.r1 = Record("1", Timestamp({"id": 0}), ClientRequest(Method.READ, {}), Timestamp(), "id_1")
-        self.r2 = Record("1", Timestamp({"id": 2}), ClientRequest(Method.READ, {}), Timestamp(), "id_2")
+        self.r1 = Record("1", Timestamp({"id": 0}), ClientRequest(Operation.READ, {}), Timestamp(), "id_1")
+        self.r2 = Record("1", Timestamp({"id": 2}), ClientRequest(Operation.READ, {}), Timestamp(), "id_2")
 
         self.replica_ts = Timestamp({"id": 1})
 
@@ -59,9 +60,9 @@ class StableTest(unittest.TestCase):
 
     def setUp(self):
 
-        self.r1 = Record("1", Timestamp({"1": 1, "2": 0, "3": 0}), ClientRequest(Method.READ, {}), Timestamp(), "id_1")
-        self.r2 = Record("2", Timestamp({"1": 0, "2": 0, "3": 0}), ClientRequest(Method.READ, {}), Timestamp(), "id_2")
-        self.r3 = Record("3", Timestamp({"1": 0, "2": 0, "3": 1}), ClientRequest(Method.READ, {}), Timestamp(), "id_3")
+        self.r1 = Record("1", Timestamp({"1": 1, "2": 0, "3": 0}), ClientRequest(Operation.READ, {}), Timestamp(), "id_1")
+        self.r2 = Record("2", Timestamp({"1": 0, "2": 0, "3": 0}), ClientRequest(Operation.READ, {}), Timestamp(), "id_2")
+        self.r3 = Record("3", Timestamp({"1": 0, "2": 0, "3": 1}), ClientRequest(Operation.READ, {}), Timestamp(), "id_3")
 
         self.log = Log([self.r3, self.r2, self.r1])
 
