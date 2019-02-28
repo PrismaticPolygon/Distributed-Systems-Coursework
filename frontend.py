@@ -71,35 +71,29 @@ class Frontend(object):
     @Pyro4.expose
     def request(self, request: ClientRequest) -> Any:
 
-        print("\n{0} requested...".format(request))
+        print("\nReceived request from client {0}".format(request))
 
-        try:
+        uri = self.get_replica_uri()
 
-            uri = self.get_replica_uri()
+        with Pyro4.Proxy(uri) as replica:
 
-            with Pyro4.Proxy(uri) as replica:
+            frontend_request: FrontendRequest = FrontendRequest(self.prev, request)
 
-                frontend_request: FrontendRequest = FrontendRequest(self.prev, request)
+            print("Sent timestamp     {0}".format(self.prev))
 
-                print("Requesting {0}...".format(self.prev))
+            if request.method is Operation.READ:
 
-                if request.method is Operation.READ:
+                response: ReplicaResponse = replica.query(frontend_request)
 
-                    response: ReplicaResponse = replica.query(frontend_request)
+            else:
 
-                else:
+                response: ReplicaResponse = replica.update(frontend_request)
 
-                    response: ReplicaResponse = replica.update(frontend_request)
+            print("Received timestamp {0}".format(response.label))
 
-                print("Received: {0}".format(response.label))
+            self.prev = response.label
 
-                self.prev = response.label
-
-                return response.value
-
-        except ConnectionRefusedError:
-
-            return "All replicas offline"
+            return response.value
 
 
 if __name__ == '__main__':

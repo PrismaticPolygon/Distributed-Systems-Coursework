@@ -94,6 +94,10 @@ class Timestamp:
                 self.replicas[id] = ts.replicas[id]
 
     def to_dict(self) -> Dict:
+        """
+        Used for serpent serialisation
+        :return: A dict representing this Timestamp
+        """
 
         return {
             "__class__": "Timestamp",
@@ -102,10 +106,12 @@ class Timestamp:
 
     @staticmethod
     def from_dict(classname: str, dict: Dict) -> 'Timestamp':
+        """
+        Used for serpent deserialisation
+        :return: A Log
+        """
 
-        del dict["__class__"]
-
-        return Timestamp(**dict)
+        return Timestamp(dict["replicas"])
 
 
 SerializerBase.register_class_to_dict(Timestamp, Timestamp.to_dict)

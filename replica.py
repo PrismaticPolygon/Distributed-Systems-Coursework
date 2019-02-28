@@ -40,10 +40,11 @@ class Replica(object):
         # updated whenever an update operation is applied to the value.
         self.value_timestamp = Timestamp({self.id: 0})
 
-        # Represents those updates that have been accepted by the RM (placed in the RM's update_log). Differs from the
+        # Represents those updates that have been accepted by the RM (placed in the RM's update log). Differs from the
         # value_timestamp because not all updates in the log are stable.
         self._replica_timestamp = Timestamp({self.id: 0})
 
+        # The Pyro name server. Storing it locally removes the overhead of re-locating it every time this RM gossips.
         self.ns = Pyro4.locateNS()
 
     db = DB()
@@ -67,10 +68,15 @@ class Replica(object):
     # Used to establish whether an update has been applied to all RMs.
 
     def query(self, query: FrontendRequest) -> ReplicaResponse:
+        """
+        If this RM holds outdated information (i.e. FE's prev > RM's value), gossip, then complete the request.
+        :param query: A FrontendRequest, comprising the FE's timestamp and the request from the client.
+        :return: A ReplicaResponse, containing the requested value and this RM's value timestamp.
+        """
 
-        print("Received query from FE", query.prev, end="...\n")
+        print("Received query from FE", query.prev)
 
-        prev: Timestamp = query.prev    # The previous timestamp
+        prev: Timestamp = query.prev    # The FE timestamp, representing the state of the information it last accessed.
         request: ClientRequest = query.request  # The request passed to the FE
 
         # q can be applied to the replica's value if q.prev <= valueTS. If it can't, gossip so that it can.
@@ -80,13 +86,11 @@ class Replica(object):
 
         result = self.db.execute_request(request)
 
-        # Don't like execute_client_request here.
-
         return ReplicaResponse(result, self.value_timestamp)
 
     def update(self, update: FrontendRequest) -> ReplicaResponse:
 
-        print("Received update from FE", update.prev, end="...\n")
+        print("Received update from FE", update.prev)
 
         id: str = update.id
         prev: Timestamp = update.prev  # The previous timestamp
@@ -102,7 +106,6 @@ class Replica(object):
                 ts.replicas[self.id] = self._replica_timestamp.replicas[self.id]
 
                 record = Record(self.id, ts, request, prev, id)
-
                 self._update_log += record
 
                 if (record.prev <= self.value_timestamp) is False:
@@ -131,8 +134,6 @@ class Replica(object):
 
         replicas_with_required_updates = self._replica_timestamp.lt(prev)
 
-        print("Need updates from", replicas_with_required_updates)
-
         for replica_id in replicas_with_required_updates:
 
             if replica_id in self._replicas:
@@ -146,23 +147,23 @@ class Replica(object):
 
             with Pyro4.Proxy(uri) as replica:
 
+                print("Gossiping with {0}".format(replica.id))
+
                 log: Log = replica.update_log
                 ts: Timestamp = replica.replica_timestamp
-
-                print("{0} gossiped {1}".format(replica.id, ts))
-
-                print("New records:", len(log.records))
+                old_log_length = len(self._update_log)
 
                 self._update_log.merge(log, self._replica_timestamp)
+
+                print("Merging update logs ({} new record(s))".format(len(self._update_log) - old_log_length))
+
                 self._replica_timestamp.merge(ts)
 
-                print("New replica timestamp:", self._replica_timestamp)
+                print("Merging replica timestamps", self._replica_timestamp)
 
                 stable: List[Record] = self._update_log.stable(self._replica_timestamp)
 
-                print("Stable:", stable)
-
-                # It's almost like because my client connects first, they can't.
+                print("{} updates now stable".format(len(stable)))
 
                 for record in stable:
 
@@ -175,6 +176,7 @@ class Replica(object):
                         # TODO: discard logs
                         # TODO: eliminate executed operation entries
 
+        print("Finished gossiping")
 # TODO: handle errors in replica, and gracefully shut down the process.
 
 # Okay: now we're fine. Weird. We had multiple of each. I SUSPECT it's because the classes holding others don't

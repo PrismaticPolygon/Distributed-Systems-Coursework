@@ -10,9 +10,9 @@ import sys
 
 class Client:
 
-    def __init__(self, id: int=None):
+    def __init__(self, id: str=None):
 
-        self.id: int = id if id is not None else randint(0, 611)
+        self.id: str = id if id is not None else str(randint(0, 611))
         self.frontend_uri: Pyro4.URI = self.get_frontend_uri()
 
     def get_frontend_uri(self) -> Frontend:
@@ -73,18 +73,30 @@ class Client:
 
         request = ClientRequest(operation, params)
 
-        print("Requesting {0}...".format(request))
+        print("\nRequesting {0}...".format(request))
 
         with Pyro4.Proxy(self.frontend_uri) as frontend:
 
-            response = frontend.request(request)
+            try:
 
-            print("Received {0}".format(response), end="\n\n")
+                response = frontend.request(request)
+
+                if request.method == operation.READ:
+
+                    print("Received {0}".format(response), end="\n\n")
+
+                else:
+
+                    print("Request complete", end="\n\n")
+
+            except ConnectionRefusedError as e:
+
+                print("Error:", e)
 
 
 if __name__ == "__main__":
 
-    client = Client(1)
+    client = Client("1")
 
     while True:
 

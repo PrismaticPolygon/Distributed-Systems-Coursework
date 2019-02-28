@@ -76,6 +76,10 @@ class Log:
 
         return str(self.records)
 
+    def __len__(self):
+
+        return len(self.records)
+
     def __iadd__(self, record: Record):
 
         self.records.append(record)
