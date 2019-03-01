@@ -33,48 +33,50 @@ class Replica(object):
 
     def __init__(self):
 
+        # This RM's UUID
         self._id = "replica-" + str(uuid.uuid4())
-        self._replicas: Dict[str, Pyro4.URI] = dict()
 
         # Represents updates currently reflected in the value. Contains one entry for every replica manager, and is
         # updated whenever an update operation is applied to the value.
         self.value_timestamp = Timestamp({self.id: 0})
 
         # Represents those updates that have been accepted by the RM (placed in the RM's update log). Differs from the
-        # value_timestamp because not all updates in the log are stable.
+        # value timestamp because not all updates in the log are stable.
         self._replica_timestamp = Timestamp({self.id: 0})
 
-        # The Pyro name server. Storing it locally removes the overhead of re-locating it every time this RM gossips.
+        # The Pyro name server. Storing it locally removes the overhead of re-locating it every time this RM gets
+        # replicas_with_updates.
         self.ns = Pyro4.locateNS()
 
-    db = DB()
+        # A Dictionary mapping RM IDs to their Pyro URIs. Storing them locally reduces look-up time when gossiping.
+        self._replicas: Dict[str, Pyro4.URI] = dict()
+
+        # This RM's update log, containing Records.
+        self._update_log = Log()
+
     # The value of the application state as maintained by the RM. Each RM is a state machine, which begins with a
     # specified initial value and is thereafter solely the result of applying update operations to that state.
+    db = DB()
 
-    _update_log = Log()
-
-    executed_operation_table: List[str] = []
     # Maintained to prevent an update being applied twice. Is checked before an update is added to the log.
     # The same update may arrive at a given replica manager from a FE and in gossip messages from other RMs. To prevent
     # an update being applied twice, this table contains the unique FE IDs of updates that have been applied to the
     # value. The RM checks this table before adding an update to the log.
-
-    timestamp_table: Dict[str, Timestamp] = {}
-    # Contains a vector timestamp for each other RM. Fill with timestamps from gossip messages ("updates")
-    # Used to determine whether a log record is known everywhere
-    # Every gossip message contains the timestamp of its sender
+    executed_operation_table: List[str] = []
 
     # Contains a vector timestamp for each other RM, filled with timestamps that arrive from them in gossip messages.
     # Used to establish whether an update has been applied to all RMs.
+    timestamp_table: Dict[str, Timestamp] = {}
 
     def query(self, query: FrontendRequest) -> ReplicaResponse:
         """
-        If this RM holds outdated information (i.e. FE's prev > RM's value), gossip, then complete the request.
+        Execute a query from an FE. If this RM holds outdated information (i.e. FE's prev > RM's value), gossip, then
+        execute the query.
         :param query: A FrontendRequest, comprising the FE's timestamp and the request from the client.
         :return: A ReplicaResponse, containing the requested value and this RM's value timestamp.
         """
 
-        print("Received query from FE", query.prev)
+        print("Received query from FE", query.prev, end="\n\n")
 
         prev: Timestamp = query.prev    # The FE timestamp, representing the state of the information it last accessed.
         request: ClientRequest = query.request  # The request passed to the FE
@@ -89,30 +91,36 @@ class Replica(object):
         return ReplicaResponse(result, self.value_timestamp)
 
     def update(self, update: FrontendRequest) -> ReplicaResponse:
+        """
+        Execute an update from an FE. If this RM holds outdated information (i.e. FE's prev > RM's value), gossip, then
+        execute the update.
+        :param update: A FrontendRequest, comprising the FE's timestamp and the request from the client.
+        :return: A ReplicaResponse, containing None and this RM's value timestamp.
+        """
 
-        print("Received update from FE", update.prev)
+        print("Received update from FE", update.prev, end="\n\n")
 
         id: str = update.id
         prev: Timestamp = update.prev  # The previous timestamp
         request: ClientRequest = update.request  # The request passed to the FE
 
-        if id not in self.executed_operation_table:
+        if id not in self.executed_operation_table:     # Update has not already been applied
 
-            if id not in self._update_log:
+            if id not in self._update_log:  # Update has not been seen before
 
-                self._replica_timestamp.replicas[self.id] += 1
+                self._replica_timestamp.replicas[self.id] += 1  # This RM has accepted an update from itself
 
                 ts = prev.copy()
                 ts.replicas[self.id] = self._replica_timestamp.replicas[self.id]
 
-                record = Record(self.id, ts, request, prev, id)
-                self._update_log += record
+                record = Record(self.id, ts, request, prev, id)     # Create a record of this update
+                self._update_log += record  # Add it to the log
 
-                if (record.prev <= self.value_timestamp) is False:
+                if (record.prev <= self.value_timestamp) is False:  # If we're missing information, gossip
 
                     self.gossip(record.prev)
 
-                else:
+                else:   # Otherwise, apply the update
 
                     self.apply_update(record)
 
@@ -121,29 +129,51 @@ class Replica(object):
         return ReplicaResponse(None, self.value_timestamp)  # Update has already been performed
 
     def apply_update(self, record: Record) -> None:
+        """
+        Apply an update, held within a Record in this RM's update log
+        :param record: a stable Record in this RM's update log
+        :return:
+        """
 
         self.db.execute_request(record.request)
         self.value_timestamp.merge(record.ts)
         self.executed_operation_table.append(record.id)
 
     def get_status(self) -> Status:
+        """
+        :return: An arbitrary status
+        """
 
         return Status.random
 
-    def gossip(self, prev: Timestamp):
+    def get_uri(self, replica_id: str) -> Pyro4.URI:
+        """
+        Get the Pyro URI of a replica. If it's already been looked-up, return the saved value. Otherwise, look it up.
+        :param replica_id: the ID of the replica whose URI is sought
+        :return: A Pyro URI
+        """
 
-        replicas_with_required_updates = self._replica_timestamp.lt(prev)
+        if replica_id in self._replicas:
 
-        for replica_id in replicas_with_required_updates:
+            return self._replicas[replica_id]
 
-            if replica_id in self._replicas:
+        else:
 
-                uri = self._replicas[replica_id]
+            uri = self.ns.lookup(replica_id)
+            self._replicas[replica_id] = uri
 
-            else:
+            return uri
 
-                uri = self.ns.lookup(replica_id)
-                self._replicas[replica_id] = uri
+    def gossip(self, prev: Timestamp) -> None:
+        """
+        Gossip with other replicas.
+        :param prev:
+        :return: None
+        """
+
+        for replica_id in self._replica_timestamp.compare(prev):    # Get a list of RMs that this RM needs updates from
+
+            uri = self.get_uri(replica_id)
 
             with Pyro4.Proxy(uri) as replica:
 
@@ -153,15 +183,15 @@ class Replica(object):
                 ts: Timestamp = replica.replica_timestamp
                 old_log_length = len(self._update_log)
 
-                self._update_log.merge(log, self._replica_timestamp)
+                self._update_log.merge(log, self._replica_timestamp)    # Merge update logs
 
                 print("Merging update logs ({} new record(s))".format(len(self._update_log) - old_log_length))
 
-                self._replica_timestamp.merge(ts)
+                self._replica_timestamp.merge(ts)   # Merge replica timestamps
 
                 print("Merging replica timestamps", self._replica_timestamp)
 
-                stable: List[Record] = self._update_log.stable(self._replica_timestamp)
+                stable: List[Record] = self._update_log.stable(self._replica_timestamp) # Get stable records
 
                 print("{} updates now stable".format(len(stable)))
 
@@ -173,14 +203,15 @@ class Replica(object):
 
                         self.timestamp_table[id] = ts
 
+                        # How do we do this?
+                        # If every RM has seem the update...
+
                         # TODO: discard logs
                         # TODO: eliminate executed operation entries
 
-        print("Finished gossiping")
-# TODO: handle errors in replica, and gracefully shut down the process.
+        print("Finished gossiping\n")
 
-# Okay: now we're fine. Weird. We had multiple of each. I SUSPECT it's because the classes holding others don't
-# delete then when they open then, essentially.
+# TODO: handle errors in replica, and gracefully shut down the process.
 
 
 if __name__ == '__main__':
@@ -206,5 +237,3 @@ if __name__ == '__main__':
     print("{0} running".format(replica.id), end="\n\n")
 
     daemon.requestLoop()
-
-    # I suspect I'm not actually closing my loops./

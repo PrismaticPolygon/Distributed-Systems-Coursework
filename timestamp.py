@@ -1,13 +1,11 @@
-from typing import Dict
+from typing import Dict, Iterator
 
 from Pyro4.util import SerializerBase
 
 
-# https://stackoverflow.com/questions/4555932/public-or-private-attribute-in-python-what-is-the-best-way
-
 class Timestamp:
 
-    def __init__(self, replicas=None):
+    def __init__(self, replicas: Dict[str, int]=None):
 
         self.replicas: Dict[str, int] = replicas if replicas is not None else dict()
 
@@ -16,16 +14,17 @@ class Timestamp:
         return str(self.replicas)
 
     def __le__(self, other: 'Timestamp') -> bool:
+        """
+        Overrides the "<=" operator. If any entry in `other` is greater, returns True.
+        :param other: The Timestamp to compare with
+        :return: A boolean
+        """
 
         for (id, value) in other.replicas.items():
 
             if id not in self.replicas:
 
                 self.replicas[id] = 0
-
-                if value > 0:
-
-                    return False
 
             elif value < self.replicas[id]:
 
@@ -39,18 +38,29 @@ class Timestamp:
 
         return True
 
-    # It's really not that clear, though, and it'd be hard to check. I'll extract this, and deal with it later.
-    # __le__ then can just check the length of this list. Smart, huh?
+    def __lt__(self, other: 'Timestamp') -> bool:
+        """
+        Overrides the "<" operator. Used to sort Timestamps when getting stable updates.
+        :param other: The Timestamp to compare with
+        :return: A boolean
+        """
 
-    # No type 'merge' apparently I'm redi
+        return self <= other
 
-    def lt(self, other: 'Timestamp'):
+    def compare(self, other: 'Timestamp') -> Iterator[str]:
+        """
+        Get an Iterator of all replica IDs for which `other` has greater entries. Used to selectively gossip with other
+        RMs.
+        :param other: The Timestamp to compare with
+        :return: An Iterator of the replica IDs for which `other` had greater entries
+        """
 
-        lt = []
+        def filter_replica(replica):
 
-        def inner(replica_id: str, value: int):
+            id = replica[0]
+            value = replica[1]
 
-            if replica_id not in self.replicas:
+            if id not in self.replicas:
 
                 self.replicas[id] = 0
 
@@ -58,30 +68,30 @@ class Timestamp:
 
                     return True
 
-            elif value < self.replicas[replica_id]:
+            elif value < self.replicas[id]:
 
                 return False
 
-        for (id, value) in other.replicas.items():
+            return True
 
-            if inner(id, value):
-
-                lt.append(id)
-
-        return lt
-
-    def __lt__(self, other: 'Timestamp') -> bool:
-
-        # That's a good point, after all: what does it mean for it to be sorted?
-        # It'd have to be in order for each replica, right?
-
-        return self <= other
+        return map(lambda entry: entry[0], filter(filter_replica, other.replicas.items()))
 
     def copy(self) -> 'Timestamp':
+        """
+        Creates a copy of this Timestamp. Used to create the Timestamp held by a Record
+        :return: A copy of this Timestamp
+        """
 
         return Timestamp(self.replicas.copy())
 
     def merge(self, ts: 'Timestamp') -> None:
+        """
+        Merges `ts` into this Timestamp. An entry is merged if it does not already exist or if the value is greater than
+        that currently held by this Timestamp. An entry contains the ID of an RM and the number of operations it has
+        performed.
+        :param ts:
+        :return:
+        """
 
         for (id, value) in ts.replicas.items():
 

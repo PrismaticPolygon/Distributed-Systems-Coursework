@@ -1,11 +1,12 @@
-import Pyro4
+import sys
 from random import randint
 
-from enums import Operation
-from requests import ClientRequest
-from frontend import Frontend
+import Pyro4
 from Pyro4.errors import NamingError, CommunicationError
-import sys
+
+from enums import Operation
+from frontend import Frontend
+from requests import ClientRequest
 
 
 class Client:
@@ -67,7 +68,7 @@ class Client:
 
         params["movie_id"] = input("Please enter a movie ID: ").strip()
 
-        if operation is not Operation.READ:
+        if operation is not Operation.READ and operation is not Operation.DELETE:
 
             params["rating"] = input("Please enter a rating: ").strip()
 

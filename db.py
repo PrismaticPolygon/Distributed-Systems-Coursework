@@ -1,7 +1,8 @@
 import sqlite3
 import time
-from requests import ClientRequest
+
 from enums import Operation
+from requests import ClientRequest
 
 
 class DB:
@@ -27,6 +28,10 @@ class DB:
         elif method == Operation.UPDATE:
 
             self.update(**params)
+
+        elif method == Operation.DELETE:
+
+            self.delete(**params)
 
         return value
 
@@ -69,7 +74,6 @@ class DB:
     def delete(self, movie_id, user_id):
 
         connection = sqlite3.connect(self.path)
-
         cursor = connection.cursor()
 
         cursor.execute("DELETE FROM ratings WHERE (movieId=? AND userId=?)", (movie_id, user_id,))

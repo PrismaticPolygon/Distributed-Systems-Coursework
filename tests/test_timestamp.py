@@ -71,6 +71,13 @@ class LessThanEqualsTest(unittest.TestCase):
 
         self.assertTrue(t1 <= t2)
 
+    def test_8(self):
+
+        t1 = Timestamp()
+        t2 = Timestamp({"id": 2})
+
+        self.assertTrue(t1 <= t2)
+
 
 class MergeTest(unittest.TestCase):
 
@@ -102,9 +109,20 @@ class MergeTest(unittest.TestCase):
         self.assertNotEqual(t2.replicas["id"], 0)
 
 
+class CompareTest(unittest.TestCase):
+
+    def test_1(self):
+
+        t1 = Timestamp({"id": 0})
+        t2 = Timestamp({"id": 1})
+
+        l = list(t1.compare(t2))
+
+        self.assertEqual(l[0], "id")
+
 def run():
 
-    test_cases = [InitTest, LessThanEqualsTest, MergeTest]
+    test_cases = [InitTest, LessThanEqualsTest, MergeTest, CompareTest]
     all_tests = unittest.TestSuite()
 
     for case in test_cases:

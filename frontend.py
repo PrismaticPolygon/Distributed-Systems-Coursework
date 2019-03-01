@@ -1,10 +1,9 @@
 import uuid
-
-import Pyro4
 from typing import Dict, Any
 
+import Pyro4
+
 from enums import Status, Operation
-from replica import Replica
 from requests import ClientRequest, FrontendRequest, ReplicaResponse
 from timestamp import Timestamp
 
@@ -21,7 +20,7 @@ class Frontend(object):
 
         self._id = "frontend-" + str(uuid.uuid4())
 
-        # A dictionary mapping replica names to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
+        # A dictionary mapping RM IDs to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
         # rather than every operation an FE performs.
         self.replicas: Dict[str, Pyro4.URI] = dict()
 
@@ -34,13 +33,24 @@ class Frontend(object):
         self.prev = Timestamp()
 
     def register_replica(self, id, uri) -> None:
+        """
+        Registers a RM with this FE.
+        :param id: The ID of the RM to be registered
+        :param uri: The Pyro URI of the RM to be registered
+        :return: None
+        """
 
         print("{0} registered".format(id))
 
         self.replicas[id] = uri
         self.prev.replicas[id] = 0
 
-    def get_replica_uri(self) -> Replica:
+    def get_replica_uri(self) -> Pyro4.URI:
+        """
+        Gets the Pyro URI of a suitable RM to send a request too. Replicas with an ACTIVE status take priority, followed
+        by OVERLOADED. An error is thrown if all replicas are OFFLINE.
+        :return: The Pyro URI of an RM
+        """
 
         overloaded = None
 
@@ -70,6 +80,11 @@ class Frontend(object):
 
     @Pyro4.expose
     def request(self, request: ClientRequest) -> Any:
+        """
+        Sends a client request to an RM, and returns the response to the client
+        :param request: A ClientRequest sent by a client
+        :return: None if the request is an update, and a value if it is a read.
+        """
 
         print("\nReceived request from client {0}".format(request))
 
@@ -91,7 +106,7 @@ class Frontend(object):
 
             print("Received timestamp {0}".format(response.label))
 
-            self.prev = response.label
+            self.prev.merge(response.label)
 
             return response.value
 
