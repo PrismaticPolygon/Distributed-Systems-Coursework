@@ -14,37 +14,41 @@ class Client:
     def __init__(self, id: str=None):
 
         self.id: str = id if id is not None else str(randint(0, 611))
-        self.frontend_uri: Pyro4.URI = self.get_frontend_uri()
+        self.ns = Pyro4.locateNS()
 
     def get_frontend_uri(self) -> Frontend:
 
         while True:
 
-            print("Getting frontend...")
+            print("\nGetting frontend...")
 
             try:
 
-                ns = Pyro4.locateNS()
-                frontends = ns.list(metadata_all={"resource:frontend"})
+                frontends = self.ns.list(metadata_all={"resource:frontend"})
 
                 name, uri = next(iter(frontends.items()))
 
-                print("Using {0}".format(name), end="\n\n")
+                print("Using {0}".format(name))
 
                 return uri
 
             except NamingError as e:
 
-                print(e)
+                print("NamingError: ", e)
 
             except CommunicationError as e:
 
-                print(e)
+                print("Communication error", e)
+
+            except StopIteration as e:
+
+                print("No frontends available")
 
             try_again = input("\nTry again? (Y/N): ").strip()
 
             if try_again != "Y":
 
+                print("Exiting client")
                 sys.exit()
 
             print("")
@@ -73,10 +77,11 @@ class Client:
             params["rating"] = input("Please enter a rating: ").strip()
 
         request = ClientRequest(operation, params)
+        frontend_uri = self.get_frontend_uri()
 
         print("\nRequesting {0}...".format(request))
 
-        with Pyro4.Proxy(self.frontend_uri) as frontend:
+        with Pyro4.Proxy(frontend_uri) as frontend:
 
             try:
 
@@ -92,25 +97,40 @@ class Client:
 
             except ConnectionRefusedError as e:
 
-                print("Error:", e)
+                print("Error:", e, end="\n\n")
+
+            except CommunicationError as e:
+
+                print("Error:", e, end="\n\n")
+
+    # Hm. It's not even clear what the error is!
 
 
 if __name__ == "__main__":
 
-    client = Client("1")
+    try:
 
-    while True:
+        print("Creating client...")
 
-        client.request()
+        client = Client("1")
 
-        try_again = input("Again? (Y/N): ").strip()
+        print("client-{} running\n".format(client.id))
 
-        if try_again != "Y":
+        while True:
 
-            break
+            client.request()
 
-        print("")
+            try_again = input("Again? (Y/N): ").strip()
 
+            if try_again != "Y":
+
+                break
+
+            print("")
+
+    except KeyboardInterrupt:
+
+        print("Exiting client\n")
 
 # Handle ConnectionClosedError
 

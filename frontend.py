@@ -1,28 +1,21 @@
 import uuid
-from typing import Dict, Any
+from typing import Any, List
 
 import Pyro4
+from Pyro4.errors import CommunicationError
 
 from enums import Status, Operation
 from requests import ClientRequest, FrontendRequest, ReplicaResponse
 from timestamp import Timestamp
 
+FAULT_TOLERANCE = 2
 
 @Pyro4.expose
 class Frontend(object):
 
-    @Pyro4.expose
-    @property
-    def id(self):
-        return self._id
-
     def __init__(self):
 
-        self._id = "frontend-" + str(uuid.uuid4())
-
-        # A dictionary mapping RM IDs to their Pyro URIs. Places the overhead of a Pyro NS search on RM creation,
-        # rather than every operation an FE performs.
-        self.replicas: Dict[str, Pyro4.URI] = dict()
+        self.id = "frontend-" + str(uuid.uuid4())
 
         # Reflects the version of the latest data values accessed by the FE. Contains an entry for every RM. Sent by the
         # FE in every request message to an RM, together with a description of the query or update operation itself.
@@ -32,83 +25,90 @@ class Frontend(object):
         # of the replicated data observed by the client.
         self.prev = Timestamp()
 
-    def register_replica(self, id, uri) -> None:
-        """
-        Registers a RM with this FE.
-        :param id: The ID of the RM to be registered
-        :param uri: The Pyro URI of the RM to be registered
-        :return: None
-        """
+        self.ns = Pyro4.locateNS()
 
-        print("{0} registered".format(id))
-
-        self.replicas[id] = uri
-        self.prev.replicas[id] = 0
-
-    def get_replica_uri(self) -> Pyro4.URI:
+    def get_replica_uri(self) -> List[Pyro4.URI]:
         """
         Gets the Pyro URI of a suitable RM to send a request too. Replicas with an ACTIVE status take priority, followed
         by OVERLOADED. An error is thrown if all replicas are OFFLINE.
         :return: The Pyro URI of an RM
         """
 
-        overloaded = None
+        replicas = self.ns.list(metadata_all={"resource:replica"})
 
-        for (name, uri) in self.replicas.items():
+        uris = []
 
-            with Pyro4.Proxy(uri) as replica:
+        for (name, uri) in replicas.items():
 
-                status: Status = Status(replica.get_status())
+            try:
 
-                if status is Status.ACTIVE:
+                with Pyro4.Proxy(uri) as replica:
 
-                    print("Using {0} ({1})".format(name, status), end="\n\n")
+                    status: Status = Status(replica.get_status())
 
-                    return uri
+                    print("{} reporting {}".format(name, status))
 
-                elif status is Status.OVERLOADED:
+                    if status is not Status.OFFLINE:
 
-                    overloaded = (name, uri, status)
+                        uris.append((name, uri))
 
-        if overloaded is not None:
+                    if len(uris) >= FAULT_TOLERANCE:
 
-            print("Using {0} ({1})".format(overloaded[0], overloaded[2]), end="\n\n")
+                        return uris
 
-            return overloaded[1]
+            except CommunicationError as e:
 
-        raise ConnectionRefusedError("All replicas offline")
+                print("{} reporting Status.OFFLINE".format(name))
+
+        if len(uris) > 0:
+
+            return uris
+
+        raise ConnectionRefusedError("All replicas reported Status.OFFLINE")
 
     @Pyro4.expose
     def request(self, request: ClientRequest) -> Any:
         """
-        Sends a client request to an RM, and returns the response to the client
+        Sends a client request to f RMs, and returns the most up-to-date response to the client
         :param request: A ClientRequest sent by a client
         :return: None if the request is an update, and a value if it is a read.
         """
 
-        print("\nReceived request from client {0}".format(request))
+        print("\nReceived request from client {0}\n".format(request))
 
-        uri = self.get_replica_uri()
+        frontend_request: FrontendRequest = FrontendRequest(self.prev, request)
+        uris = self.get_replica_uri()
+        responses: List[ReplicaResponse] = []
 
-        with Pyro4.Proxy(uri) as replica:
+        for (name, uri) in uris:
 
-            frontend_request: FrontendRequest = FrontendRequest(self.prev, request)
+            print("\nUsing {}\n".format(name))
 
-            print("Sent timestamp     {0}".format(self.prev))
+            with Pyro4.Proxy(uri) as replica:
 
-            if request.method is Operation.READ:
+                print("Sent timestamp {0}".format(self.prev))
 
-                response: ReplicaResponse = replica.query(frontend_request)
+                if request.method is Operation.READ:
 
-            else:
+                    response: ReplicaResponse = replica.query(frontend_request)
 
-                response: ReplicaResponse = replica.update(frontend_request)
+                else:
 
-            print("Received timestamp {0}".format(response.label))
+                    response: ReplicaResponse = replica.update(frontend_request)
 
-            self.prev.merge(response.label)
+                responses.append(response)
 
-            return response.value
+                self.prev.merge(response.label)
+
+                print("New timestamp  {0}".format(self.prev))
+
+        if len(responses) > 0:
+
+            return responses[0].value
+
+        else:
+
+            return None
 
 
 if __name__ == '__main__':
@@ -116,13 +116,12 @@ if __name__ == '__main__':
     print("Creating frontend...")
 
     daemon = Pyro4.Daemon()
-    ns = Pyro4.locateNS()
     frontend = Frontend()
 
     uri = daemon.register(frontend)
 
     print("{0} running".format(frontend.id), end="\n\n")
 
-    ns.register(frontend.id, uri, metadata={"resource:frontend"})
+    frontend.ns.register(frontend.id, uri, metadata={"resource:frontend"})
 
     daemon.requestLoop()

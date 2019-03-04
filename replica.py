@@ -2,6 +2,7 @@ import uuid
 from typing import List, Dict
 
 import Pyro4
+from Pyro4.errors import CommunicationError
 
 from db import DB
 from enums import Status
@@ -47,9 +48,6 @@ class Replica(object):
         # The Pyro name server. Storing it locally removes the overhead of re-locating it every time this RM gets
         # replicas_with_updates.
         self.ns = Pyro4.locateNS()
-
-        # A Dictionary mapping RM IDs to their Pyro URIs. Storing them locally reduces look-up time when gossiping.
-        self._replicas: Dict[str, Pyro4.URI] = dict()
 
         # This RM's update log, containing Records.
         self._update_log = Log()
@@ -146,23 +144,33 @@ class Replica(object):
 
         return Status.random
 
-    def get_uri(self, replica_id: str) -> Pyro4.URI:
-        """
-        Get the Pyro URI of a replica. If it's already been looked-up, return the saved value. Otherwise, look it up.
-        :param replica_id: the ID of the replica whose URI is sought
-        :return: A Pyro URI
-        """
+    def apply_gossip(self, replica: 'Replica'):
 
-        if replica_id in self._replicas:
+        print("Gossiping with {0}".format(replica.id))
 
-            return self._replicas[replica_id]
+        log: Log = replica.update_log
+        ts: Timestamp = replica.replica_timestamp
+        old_log_length = len(self._update_log)
 
-        else:
+        self._update_log.merge(log, self._replica_timestamp)  # Merge update logs
 
-            uri = self.ns.lookup(replica_id)
-            self._replicas[replica_id] = uri
+        print("Merging update logs ({} new record(s))".format(len(self._update_log) - old_log_length))
 
-            return uri
+        self._replica_timestamp.merge(ts)  # Merge replica timestamps
+
+        print("New replica timestamp", self._replica_timestamp)
+
+        stable: List[Record] = self._update_log.stable(self._replica_timestamp)  # Get stable records
+
+        print("{} updates now stable\n".format(len(stable)))
+
+        for record in stable:
+
+            if record.id not in self.executed_operation_table:
+
+                self.apply_update(record)
+
+                self.timestamp_table[id] = ts
 
     def gossip(self, prev: Timestamp) -> None:
         """
@@ -173,45 +181,20 @@ class Replica(object):
 
         for replica_id in self._replica_timestamp.compare(prev):    # Get a list of RMs that this RM needs updates from
 
-            uri = self.get_uri(replica_id)
+            uri = self.ns.lookup(replica_id)
 
-            with Pyro4.Proxy(uri) as replica:
+            try:
 
-                print("Gossiping with {0}".format(replica.id))
+                with Pyro4.Proxy(uri) as replica:
 
-                log: Log = replica.update_log
-                ts: Timestamp = replica.replica_timestamp
-                old_log_length = len(self._update_log)
+                    self.apply_gossip(replica)
 
-                self._update_log.merge(log, self._replica_timestamp)    # Merge update logs
+            except CommunicationError as e:
 
-                print("Merging update logs ({} new record(s))".format(len(self._update_log) - old_log_length))
-
-                self._replica_timestamp.merge(ts)   # Merge replica timestamps
-
-                print("Merging replica timestamps", self._replica_timestamp)
-
-                stable: List[Record] = self._update_log.stable(self._replica_timestamp) # Get stable records
-
-                print("{} updates now stable".format(len(stable)))
-
-                for record in stable:
-
-                    if record.id not in self.executed_operation_table:
-
-                        self.apply_update(record)
-
-                        self.timestamp_table[id] = ts
-
-                        # How do we do this?
-                        # If every RM has seem the update...
-
-                        # TODO: discard logs
-                        # TODO: eliminate executed operation entries
+                print("{} with required updates reporting Status.OFFLINE\n".format(replica_id))  # A replica with a
+                # required update is offline.
 
         print("Finished gossiping\n")
-
-# TODO: handle errors in replica, and gracefully shut down the process.
 
 
 if __name__ == '__main__':
@@ -223,16 +206,6 @@ if __name__ == '__main__':
 
     uri = daemon.register(replica)
     replica.ns.register(replica.id, uri, metadata={"resource:replica"})
-
-    frontends = replica.ns.list(metadata_all={"resource:frontend"})
-
-    for (fe_name, fe_uri) in frontends.items():
-
-        with Pyro4.Proxy(fe_uri) as frontend:
-
-            frontend.register_replica(replica.id, uri)
-
-            print("Registering with {0}...".format(frontend.id))
 
     print("{0} running".format(replica.id), end="\n\n")
 
