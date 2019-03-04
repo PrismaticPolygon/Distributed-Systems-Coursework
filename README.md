@@ -14,5 +14,9 @@ To run a Python module, the following command must be used: `cd./venv/Scripts &&
 activate the virtual environment and return the CLI to the base directory, from which Python commands can be run using
 `python -m frontend`, for example.
 
+Each replica updates its value only in memory, but all initialise their database from the same file, 
+`database/ratings.sqlite`. As a result, changes between sessions are not saved, but this ensures that the gossip
+architecture provably works.
+
 By default, each FE sends requests to 2 separate RMs. The system is therefore tolerant of 1 failure. In order to test
-this, a replica may be shut down mid-operation. 
+this, a replica may be shut down mid-operation. This parameter is encoded as `FAULT_TOLERANCE` in `frontend.py`.

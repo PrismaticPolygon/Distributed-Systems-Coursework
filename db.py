@@ -3,13 +3,22 @@ import time
 
 from enums import Operation
 from requests import ClientRequest
+from typing import Any
 
 
 class DB:
 
-    path = "./database/data.sqlite"
+    def __init__(self):
 
-    def execute_request(self, request: ClientRequest):
+        self.path = "./database/ratings.sqlite"
+
+        connection = sqlite3.connect(self.path)    # Load the database on file
+        script = "".join(connection.iterdump())  # Convert it into a script
+
+        self.connection = sqlite3.connect(":memory:", check_same_thread=False)  # Connect to an in-memory DB
+        self.connection.executescript(script)   # Load the file database into it
+
+    def execute_request(self, request: ClientRequest) -> Any:
 
         print("Executing request", request)
 
@@ -37,19 +46,17 @@ class DB:
 
     def create(self, user_id, movie_id, rating) -> None:
 
-        connection = sqlite3.connect(self.path)
-        cursor = connection.cursor()
+        cursor = self.connection.cursor()
 
         cursor.execute("INSERT INTO ratings VALUES (?, ?, ?, ?)", (user_id, movie_id, rating, time.time(),))
 
-        connection.commit()
+        self.connection.commit()
 
         print("Rating created!", end="\n\n")
 
-    def read(self, user_id: str, movie_id: str):
+    def read(self, user_id: str, movie_id: str) -> float:
 
-        connection = sqlite3.connect(self.path)
-        cursor = connection.cursor()
+        cursor = self.connection.cursor()
 
         cursor.execute("SELECT rating FROM ratings WHERE (userId=? AND movieId=?)", (user_id, movie_id))
 
@@ -60,25 +67,23 @@ class DB:
 
         return rating
 
-    def update(self, movie_id, user_id, rating) -> None:
+    def update(self, movie_id: str, user_id: str, rating) -> None:
 
-        connection = sqlite3.connect(self.path)
-        cursor = connection.cursor()
+        cursor = self.connection.cursor()
 
         cursor.execute("UPDATE ratings SET rating=? WHERE (movieId=? AND userId=?)", (rating, movie_id, user_id,))
 
-        connection.commit()
+        self.connection.commit()
 
         print("Rating updated!", end="\n\n")
 
-    def delete(self, movie_id, user_id):
+    def delete(self, movie_id: str, user_id: str) -> None:
 
-        connection = sqlite3.connect(self.path)
-        cursor = connection.cursor()
+        cursor = self.connection.cursor()
 
         cursor.execute("DELETE FROM ratings WHERE (movieId=? AND userId=?)", (movie_id, user_id,))
 
-        connection.commit()
+        self.connection.commit()
 
         print("Rating deleted!", end="\n\n")
 
