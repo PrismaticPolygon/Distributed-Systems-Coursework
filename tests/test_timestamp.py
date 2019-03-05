@@ -120,6 +120,7 @@ class CompareTest(unittest.TestCase):
 
         self.assertEqual(l[0], "id")
 
+
 def run():
 
     test_cases = [InitTest, LessThanEqualsTest, MergeTest, CompareTest]
@@ -130,7 +131,3 @@ def run():
         all_tests.addTest(unittest.TestLoader().loadTestsFromTestCase(case))
 
     unittest.TextTestRunner(verbosity=2).run(all_tests)
-
-
-
-

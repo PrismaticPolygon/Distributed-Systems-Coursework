@@ -23,3 +23,6 @@ this, a replica may be shut down mid-operation. This parameter is encoded as `FA
 
 All ratings are associated with a user ID. There are 611 user IDs in the ratings DB: if no ID is inputted, a random ID
 in the range `0 - 611` is selected: this is displayed on operations.
+
+Unit tests for the more complex Timestamp and Log functionality can be found in
+`tests`. They may be run using `python -m tests`.

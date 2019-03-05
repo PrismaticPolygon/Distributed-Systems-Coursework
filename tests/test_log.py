@@ -111,6 +111,3 @@ def run():
         all_tests.addTest(unittest.TestLoader().loadTestsFromTestCase(case))
 
     unittest.TextTestRunner(verbosity=2).run(all_tests)
-
-
-run()
