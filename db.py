@@ -10,7 +10,7 @@ class DB:
 
     def __init__(self):
 
-        self.path = "./database/ratings.sqlite"
+        self.path = "./database/data.sqlite"
 
         connection = sqlite3.connect(self.path)    # Load the database on file
         script = "".join(connection.iterdump())  # Convert it into a script
@@ -28,7 +28,7 @@ class DB:
 
         if method == Operation.CREATE:
 
-            self.create(**params)
+            value = self.create(**params)
 
         elif method == Operation.READ:
 
@@ -36,11 +36,11 @@ class DB:
 
         elif method == Operation.UPDATE:
 
-            self.update(**params)
+            value = self.update(**params)
 
         elif method == Operation.DELETE:
 
-            self.delete(**params)
+            value = self.delete(**params)
 
         elif method == Operation.AVERAGE:
 
@@ -50,9 +50,11 @@ class DB:
 
             value = self.all(**params)
 
+        print(value, end="\n\n")
+
         return value
 
-    def create(self, user_id, movie_id, rating) -> None:
+    def create(self, user_id, movie_id, rating) -> str:
 
         cursor = self.connection.cursor()
 
@@ -60,9 +62,9 @@ class DB:
 
         self.connection.commit()
 
-        print("Rating created!", end="\n\n")
+        return "Rating for " + self.title(movie_id) + " created: " + str(rating)
 
-    def read(self, user_id: str, movie_id: str) -> float:
+    def read(self, user_id: str, movie_id: str) -> str:
 
         cursor = self.connection.cursor()
 
@@ -71,11 +73,9 @@ class DB:
         result = cursor.fetchone()
         rating = result[0] if result is not None else None
 
-        print("Rating is {0}!".format(rating), end="\n\n")
+        return "Rating for " + self.title(movie_id) + ": " + str(rating)
 
-        return rating
-
-    def update(self, movie_id: str, user_id: str, rating) -> None:
+    def update(self, movie_id: str, user_id: str, rating) -> str:
 
         cursor = self.connection.cursor()
 
@@ -83,9 +83,9 @@ class DB:
 
         self.connection.commit()
 
-        print("Rating updated!", end="\n\n")
+        return "Rating for " + self.title(movie_id) + "(" + movie_id + ") updated: " + str(rating)
 
-    def delete(self, movie_id: str, user_id: str) -> None:
+    def delete(self, movie_id: str, user_id: str) -> str:
 
         cursor = self.connection.cursor()
 
@@ -93,9 +93,9 @@ class DB:
 
         self.connection.commit()
 
-        print("Rating deleted!", end="\n\n")
+        return "Rating for " + self.title(movie_id) + " deleted"
 
-    def average(self, movie_id: str) -> Any:
+    def average(self, movie_id: str) -> str:
 
         cursor = self.connection.cursor()
 
@@ -105,9 +105,27 @@ class DB:
 
         rating = result[0] if result is not None else None
 
-        print("Average rating is {0}!".format(rating), end="\n\n")
+        return "Average rating for " + self.title(movie_id) + ": " + str(rating)
 
-        return rating
+    def title(self, movie_id: str) -> str:
+
+        cursor = self.connection.cursor()
+
+        cursor.execute("SELECT title FROM movies WHERE (movieId=?)", (movie_id,))
+
+        result = cursor.fetchone()
+
+        return result[0] + " (" + movie_id + ")"
+
+    # def genres(self, movie_id: str) -> Any:
+    #
+    #     cursor = self.connection.cursor()
+    #
+    #     cursor.execute("SELECT genres FROM movies WHERE (movieId=?)", (movie_id,))
+    #
+    #     result = cursor.fetchone()
+    #
+    #     return result[0]
 
     def all(self, user_id: str) -> Any:
 
@@ -117,11 +135,5 @@ class DB:
 
         result = cursor.fetchall()
 
-        print("All ratings:\n")
-
-        for rating in result:
-
-            print(rating)
-
-        return result
+        return [self.title(rating[0]) + ": " + str(rating) for rating in result]
 
