@@ -88,7 +88,7 @@ class Frontend(object):
 
                 print("Sent timestamp {0}".format(self.prev))
 
-                if request.method is Operation.READ:
+                if request.method in [Operation.READ, Operation.AVERAGE, Operation.ALL]:
 
                     response: ReplicaResponse = replica.query(frontend_request)
 

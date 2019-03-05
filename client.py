@@ -15,6 +15,26 @@ class Client:
         self.id: str = id if id is not None else str(randint(0, 611))
         self.ns = Pyro4.locateNS()
 
+        self.commands = [{
+            "text": "Get average rating",
+            "operation": Operation.AVERAGE
+        }, {
+            "text": "Create user rating",
+            "operation": Operation.CREATE
+        }, {
+            "text": "Get user rating",
+            "operation": Operation.READ
+        }, {
+            "text": "Update user rating",
+            "operation": Operation.UPDATE
+        }, {
+            "text": "Delete user rating",
+            "operation": Operation.DELETE
+        }, {
+            "text": "Get all user ratings",
+            "operation": Operation.ALL
+        }]
+
     def get_frontend_uri(self) -> Pyro4.URI:
         """
         Get the URI of an available Frontend.
@@ -58,7 +78,7 @@ class Client:
 
     def request(self) -> None:
         """
-        Make a request to a frontend
+        Make a request to a FE. Users select a command from a list.
         :return: None
         """
 
@@ -66,22 +86,41 @@ class Client:
 
         while True:
 
-            operation_input = input("Please enter an operation (CREATE/READ/UPDATE/DELETE): ").strip()
+            for i, command in enumerate(self.commands):
+
+                print(str(i + 1) + ". " + command['text'])
+
+            operation_input = input("\nPlease choose a command (1 - {}): ".format(len(self.commands))).strip()#
 
             try:
 
-                operation = Operation(operation_input)
-                break
+                i = int(operation_input)
+
+                if 1 <= i <= len(self.commands):
+
+                    operation = self.commands[i - 1]['operation']
+
+                    break
+
+                else:
+
+                    raise ValueError
 
             except ValueError:
 
                 print("Invalid operation entered\n")
 
-        params["movie_id"] = input("Please enter a movie ID: ").strip()
+        if operation is not Operation.ALL:
 
-        if operation is not Operation.READ and operation is not Operation.DELETE:
+            params["movie_id"] = input("Please enter a movie ID: ").strip()
+
+        if operation in [Operation.CREATE, Operation.UPDATE]:
 
             params["rating"] = input("Please enter a rating: ").strip()
+
+        if operation is Operation.AVERAGE:
+
+            del params['user_id']
 
         request = ClientRequest(operation, params)
         frontend_uri = self.get_frontend_uri()
@@ -94,9 +133,19 @@ class Client:
 
                 response = frontend.request(request)
 
-                if request.method == operation.READ:
+                if request.method in [operation.READ, operation.AVERAGE]:
 
                     print("Received {0}".format(response), end="\n\n")
+
+                elif request.method is Operation.ALL:
+
+                    print("Received:\n")
+
+                    for rating in response:
+
+                        print(rating)
+
+                    print()
 
                 else:
 

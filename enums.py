@@ -42,3 +42,5 @@ class Operation(Enum):
     READ = "READ"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
+    AVERAGE = "AVERAGE"
+    ALL = "All"

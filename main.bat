@@ -25,7 +25,6 @@ FOR /L %%i IN (1,1,%num_frontends%) DO (
     start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m frontend"
 )
 cls
-timeout 15
 FOR /L %%i IN (1,1,%num_replicas%) DO (
     start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m replica"
 )

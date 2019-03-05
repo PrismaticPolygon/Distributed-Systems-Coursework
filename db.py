@@ -42,6 +42,14 @@ class DB:
 
             self.delete(**params)
 
+        elif method == Operation.AVERAGE:
+
+            value = self.average(**params)
+
+        elif method == Operation.ALL:
+
+            value = self.all(**params)
+
         return value
 
     def create(self, user_id, movie_id, rating) -> None:
@@ -86,4 +94,34 @@ class DB:
         self.connection.commit()
 
         print("Rating deleted!", end="\n\n")
+
+    def average(self, movie_id: str) -> Any:
+
+        cursor = self.connection.cursor()
+
+        cursor.execute("SELECT ROUND(AVG(rating)) FROM ratings WHERE (movieId=?)", (movie_id,))
+
+        result = cursor.fetchone()
+
+        rating = result[0] if result is not None else None
+
+        print("Average rating is {0}!".format(rating), end="\n\n")
+
+        return rating
+
+    def all(self, user_id: str) -> Any:
+
+        cursor = self.connection.cursor()
+
+        cursor.execute("SELECT movieId, rating FROM ratings WHERE (userId=?)", (user_id,))
+
+        result = cursor.fetchall()
+
+        print("All ratings:\n")
+
+        for rating in result:
+
+            print(rating)
+
+        return result
 
