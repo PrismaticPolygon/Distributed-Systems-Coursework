@@ -20,3 +20,6 @@ architecture provably works.
 
 By default, each FE sends requests to 2 separate RMs. The system is therefore tolerant of 1 failure. In order to test
 this, a replica may be shut down mid-operation. This parameter is encoded as `FAULT_TOLERANCE` in `frontend.py`.
+
+All ratings are associated with a user ID. There are 611 user IDs in the ratings DB: if no ID is inputted, a random ID
+in the range `0 - 611` is selected: this is displayed on operations.

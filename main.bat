@@ -1,5 +1,6 @@
 SET "num_replicas=3"
 SET "num_frontends=1"
+SET "user_id=1"
 
 IF NOT "%1"=="" (
 
@@ -13,14 +14,21 @@ IF NOT "%2"=="" (
 
 )
 
-start cmd.exe /k "cd./venv/Scripts && activate && cd ..\.. && python -m Pyro4.naming"
+IF NOT "%3"=="" (
+
+    SET "user_id=%3"
+
+)
+
+start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m Pyro4.naming"
 FOR /L %%i IN (1,1,%num_frontends%) DO (
-    start cmd.exe /k "cd./venv/Scripts && activate && cd ..\.. && python -m frontend"
+    start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m frontend"
 )
 cls
 timeout 15
 FOR /L %%i IN (1,1,%num_replicas%) DO (
-    start cmd.exe /k "cd./venv/Scripts && activate && cd ..\.. && python -m replica"
+    start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m replica"
 )
 cls
-cd./venv/Scripts && activate && cd ..\.. && python -m client
+cd./venv/Scripts&&activate&&cd ..\..&&python -m client %3
+cls

@@ -5,7 +5,6 @@ import Pyro4
 from Pyro4.errors import NamingError, CommunicationError
 
 from enums import Operation
-from frontend import Frontend
 from requests import ClientRequest
 
 
@@ -16,7 +15,11 @@ class Client:
         self.id: str = id if id is not None else str(randint(0, 611))
         self.ns = Pyro4.locateNS()
 
-    def get_frontend_uri(self) -> Frontend:
+    def get_frontend_uri(self) -> Pyro4.URI:
+        """
+        Get the URI of an available Frontend.
+        :return: The URI of a FE
+        """
 
         while True:
 
@@ -53,7 +56,11 @@ class Client:
 
             print("")
 
-    def request(self):
+    def request(self) -> None:
+        """
+        Make a request to a frontend
+        :return: None
+        """
 
         params = {"user_id": self.id}
 
@@ -108,11 +115,13 @@ class Client:
 
 if __name__ == "__main__":
 
+    client_id = sys.argv[1] if len(sys.argv) >= 2 else None
+
     try:
 
-        print("Creating client...")
+        print("\nCreating client...")
 
-        client = Client("1")
+        client = Client(client_id)
 
         print("client-{} running\n".format(client.id))
 
@@ -131,7 +140,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
 
         print("Exiting client\n")
-
-# Handle ConnectionClosedError
-
-# Handle CommunicationError?
