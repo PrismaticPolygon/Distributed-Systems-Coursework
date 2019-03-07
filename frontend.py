@@ -105,7 +105,7 @@ class Frontend(object):
         print("\nNew timestamp  {0}".format(self.prev))
         print("Returning '{0}'".format(value))
 
-        return value  # Something's going wrong
+        return value
 
 
 if __name__ == '__main__':

@@ -2,15 +2,19 @@
 
 This is my submission for the Distributed Systems coursework of the Networks and Systems module at Durham University, 2019.
 
-The distributed system diagram, explaining how the system functions, can be found at `documents/diagram.pdf`.
+## Diagram
 
-## Packages
-
-This project requires `Pyro4` to run. It may be installed using the instructions found [here](https://pythonhosted.org/Pyro4/install.html).
-The project may also required `msgpacker`, which can be installed using `python -m pip install msgpacker`. 
-
+The distributed system diagram, showing major workflows among servers, a client, and the frontend, can be found at `documents/diagram.pdf`.
 
 ## Running
+
+#### Packages and version
+
+This project requires `Pyro4` to run. It may be installed using the instructions found [here](https://pythonhosted.org/Pyro4/install.html).
+The project may also require `msgpacker`, which can be installed using `python -m pip install msgpacker`. The system was
+tested using Python `3.6.3`.
+
+#### main.bat
 
 To run the system, use `main.bat`, located in the base repository. `main.bat` accepts three arguments: the number of
 frontends (FEs) to launch, the number of replica managers (RMs) to launch, and the user ID of the client. For example, `main.bat 2 4 42`
@@ -32,7 +36,8 @@ in separate terminal windows. The Pyro Name Server must be running before any DS
 As a result, changes between sessions are not saved, but this ensures replicas only modify their copy of the data, 
 rather than the (centralised) original. 
 * If a RM receives a query  or update and has out-dated information, it immediately requests the information from an RM with
-the correct information. In this way, the user **never** receives out-of-date information. Replicas are only up-dated when needed.
+the correct information. In this way, the user **never** receives out-of-date information, the strictest possible consistency control.
+Updates are causally ordered.
 * By default, each FE sends requests to `2` separate RMs. This parameter is encoded as `FAULT_TOLERANCE` in `frontend.py`.
 The system is therefore tolerant of `1` failure. Replicas respond with arbitrary statuses (`ACTIVE`, `OVERLOADED`, 
 `OFFLINE`), as per the specification, when queried. The system is structured in such a way that a replica actually being
