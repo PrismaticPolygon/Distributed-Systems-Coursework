@@ -13,7 +13,6 @@ from timestamp import Timestamp
 
 @Pyro4.expose
 class Replica(object):
-
     # Accessor methods for properties of this RM; used for gossip
     @Pyro4.expose
     @property
@@ -75,12 +74,11 @@ class Replica(object):
 
         print("Received query from FE", query.prev, end="\n\n")
 
-        prev: Timestamp = query.prev    # The FE timestamp, representing the state of the information it last accessed.
+        prev: Timestamp = query.prev  # The FE timestamp, representing the state of the information it last accessed.
         request: ClientRequest = query.request  # The request passed to the FE
 
         # q can be applied to the replica's value if q.prev <= valueTS. If it can't, gossip so that it can.
         if (prev <= self.value_timestamp) is False:
-
             self.gossip(prev)
 
         result = self.database.execute_request(request)
@@ -102,7 +100,7 @@ class Replica(object):
         request: ClientRequest = update.request  # The request passed to the FE
         result = None
 
-        if id not in self.executed_operation_table:     # Update has not already been applied
+        if id not in self.executed_operation_table:  # Update has not already been applied
 
             if id not in self._update_log:  # Update has not been seen before
 
@@ -111,14 +109,14 @@ class Replica(object):
                 ts = prev.copy()
                 ts.replicas[self.id] = self._replica_timestamp.replicas[self.id]  # Update the timestamp to reflect this
 
-                record = Record(self.id, ts, request, prev, id)     # Create a record of this update
+                record = Record(self.id, ts, request, prev, id)  # Create a record of this update
                 self._update_log += record  # Add it to the log
 
                 if (record.prev <= self.value_timestamp) is False:  # If we're missing information, gossip
 
                     self.gossip(record.prev)
 
-                else:   # Otherwise, apply the update
+                else:  # Otherwise, apply the update
 
                     result = self.apply_update(record)
 
@@ -133,7 +131,7 @@ class Replica(object):
         :return: a message from the Database
         """
 
-        self.value_timestamp.merge(record.ts)   # Merge this RM's value timestamp with the timestamp of the record
+        self.value_timestamp.merge(record.ts)  # Merge this RM's value timestamp with the timestamp of the record
         self.executed_operation_table.append(record.id)  # Add the record's ID to the executed operation table
 
         return self.database.execute_request(record.request)  # Execute the request
@@ -149,8 +147,8 @@ class Replica(object):
 
         print("Gossiping with {0}".format(replica.id))
 
-        log: Log = replica.update_log   # The RM's update_log
-        ts: Timestamp = replica.replica_timestamp   # The RM's replica timestamp
+        log: Log = replica.update_log  # The RM's update_log
+        ts: Timestamp = replica.replica_timestamp  # The RM's replica timestamp
         old_log_length = len(self._update_log)
 
         self._update_log.merge(log, self._replica_timestamp)  # Merge update logs
@@ -165,13 +163,13 @@ class Replica(object):
 
         print("{} updates now stable\n".format(len(stable)))
 
-        for record in stable:   # Iterate through stable records
+        for record in stable:  # Iterate through stable records
 
             if record.id not in self.executed_operation_table:  # If the record has not already been applied
 
-                self.apply_update(record)   # Apply the update
+                self.apply_update(record)  # Apply the update
 
-                self.timestamp_table[id] = ts   # Update the timestamp table
+                self.timestamp_table[id] = ts  # Update the timestamp table
 
     def gossip(self, prev: Timestamp) -> None:
         """
@@ -180,10 +178,10 @@ class Replica(object):
         :return: None
         """
 
-        for replica_id in self._replica_timestamp.compare(prev):    # Iterate through a  list of RMs that this RM needs
+        for replica_id in self._replica_timestamp.compare(prev):  # Iterate through a  list of RMs that this RM needs
             # updates from
 
-            uri = self.ns.lookup(replica_id)    # Get the URI of the RM
+            uri = self.ns.lookup(replica_id)  # Get the URI of the RM
 
             try:
 
@@ -201,7 +199,6 @@ class Replica(object):
 
 
 if __name__ == '__main__':
-
     print("Creating replica...")
 
     daemon = Pyro4.Daemon()

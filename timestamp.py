@@ -4,8 +4,7 @@ from Pyro4.util import SerializerBase
 
 
 class Timestamp:
-
-    def __init__(self, replicas: Dict[str, int]=None):
+    def __init__(self, replicas: Dict[str, int] = None):
 
         self.replicas: Dict[str, int] = replicas if replicas is not None else dict()
 
@@ -33,7 +32,6 @@ class Timestamp:
         for (id, value) in self.replicas.items():
 
             if id not in other.replicas and value > 0:
-
                 return False
 
         return True
@@ -65,7 +63,6 @@ class Timestamp:
                 self.replicas[id] = 0
 
                 if value > 0:
-
                     return True
 
             elif value < self.replicas[id]:

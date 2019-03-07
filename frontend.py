@@ -12,10 +12,9 @@ FAULT_TOLERANCE = 2
 
 
 class Frontend(object):
-
     def __init__(self):
 
-        self.id = "frontend-" + str(uuid.uuid4())   # The ID of this FE
+        self.id = "frontend-" + str(uuid.uuid4())  # The ID of this FE
 
         # Reflects the version of the replicated data accessed by the FE; contains an entry for every RM. The FE sends
         # this with every query or update operation. When a RM returns a value as the result of a query operation, it
@@ -47,20 +46,17 @@ class Frontend(object):
                     print("{} reporting {}".format(name, status))
 
                     if status is not Status.OFFLINE:
-
-                        uris.append((name, uri))    # Add the replica to those we'll use
+                        uris.append((name, uri))  # Add the replica to those we'll use
 
                     if len(uris) >= FAULT_TOLERANCE:
-
-                        return uris     # We've found enough replicas: return those we already have
+                        return uris  # We've found enough replicas: return those we already have
 
             except CommunicationError:
 
-                print("{} reporting Status.OFFLINE".format(name))   # The replica is offline!
+                print("{} reporting Status.OFFLINE".format(name))  # The replica is offline!
 
         if len(uris) > 0:
-
-            return uris     # We've found some!
+            return uris  # We've found some!
 
         raise ConnectionRefusedError("All replicas reported Status.OFFLINE")  # All replicas are offline: raise an error
 
@@ -75,10 +71,10 @@ class Frontend(object):
         print("\nReceived request from client {0}\n".format(request))
 
         frontend_request: FrontendRequest = FrontendRequest(self.prev, request)  # Build a frontend request
-        uris = self.get_replica_uri()   # Get the URIs of available replicas
+        uris = self.get_replica_uri()  # Get the URIs of available replicas
         responses: List[ReplicaResponse] = []
 
-        for (name, uri) in uris:    # Iterate through those URIs
+        for (name, uri) in uris:  # Iterate through those URIs
 
             print("\nUsing {}\n".format(name))
 
@@ -92,7 +88,7 @@ class Frontend(object):
 
                 else:
 
-                    response: ReplicaResponse = replica.update(frontend_request)    # Update the replica
+                    response: ReplicaResponse = replica.update(frontend_request)  # Update the replica
 
                 responses.append(response)  # Add the response to those received
 
@@ -102,7 +98,7 @@ class Frontend(object):
 
         if len(responses) > 0:
 
-            return responses[0].value   # Return a response
+            return responses[0].value  # Return a response
 
         else:
 
@@ -110,7 +106,6 @@ class Frontend(object):
 
 
 if __name__ == '__main__':
-
     print("Creating frontend...")
 
     daemon = Pyro4.Daemon()

@@ -9,10 +9,9 @@ from requests import ClientRequest
 
 
 class Client:
+    def __init__(self, id: str = None):
 
-    def __init__(self, id: str=None):
-
-        self.id: str = id if id is not None else str(randint(0, 611))   # The ID of this user
+        self.id: str = id if id is not None else str(randint(0, 611))  # The ID of this user
         self.ns = Pyro4.locateNS()  # The Pyro Name Server
 
         self.commands = [{  # The commands available to the user
@@ -47,9 +46,9 @@ class Client:
 
             try:
 
-                frontends = self.ns.list(metadata_all={"resource:frontend"})    # Get all registered FEs
+                frontends = self.ns.list(metadata_all={"resource:frontend"})  # Get all registered FEs
 
-                name, uri = next(iter(frontends.items()))   # Get the first one available
+                name, uri = next(iter(frontends.items()))  # Get the first one available
 
                 print("Using {0}".format(name))
 
@@ -67,10 +66,9 @@ class Client:
 
                 print("No frontends available")
 
-            try_again = input("\nTry again? (Y/N): ").strip()   # Prompt the user to try again on failure
+            try_again = input("\nTry again? (Y/N): ").strip()  # Prompt the user to try again on failure
 
             if try_again != "Y":
-
                 raise KeyboardInterrupt
 
             print("")
@@ -82,7 +80,7 @@ class Client:
         """
         while True:
 
-            for i, command in enumerate(self.commands):     # Print out available operations
+            for i, command in enumerate(self.commands):  # Print out available operations
 
                 print(str(i + 1) + ". " + command['text'])
 
@@ -90,15 +88,15 @@ class Client:
 
             try:
 
-                i = int(operation_input)    # Cast the input to an int
+                i = int(operation_input)  # Cast the input to an int
 
                 if 1 <= i <= len(self.commands):
 
-                    return self.commands[i - 1]['operation']    # Map the input to an operation
+                    return self.commands[i - 1]['operation']  # Map the input to an operation
 
                 else:
 
-                    raise ValueError    # Raise an error if the user has entered an invalid operation
+                    raise ValueError  # Raise an error if the user has entered an invalid operation
 
             except ValueError:
 
@@ -112,15 +110,15 @@ class Client:
 
             try:
 
-                i = int(rating_input)    # Cast the input to an int
+                i = int(rating_input)  # Cast the input to an int
 
                 if 1 <= i <= 5:
 
-                    return i    # Return the rating
+                    return i  # Return the rating
 
                 else:
 
-                    raise ValueError    # Raise an error if the user has entered an invalid rating
+                    raise ValueError  # Raise an error if the user has entered an invalid rating
 
             except ValueError:
 
@@ -165,9 +163,9 @@ class Client:
 
             try:
 
-                response = frontend.request(request)    # Make the request
+                response = frontend.request(request)  # Make the request
 
-                print(response)     # Display the response
+                print(response)  # Display the response
 
             except ConnectionRefusedError as e:
 
@@ -194,12 +192,11 @@ if __name__ == "__main__":
 
         while True:
 
-            client.request()    # Make requests until the user wants to exit
+            client.request()  # Make requests until the user wants to exit
 
             try_again = input("Again? (Y/N): ").strip()
 
             if try_again != "Y":
-
                 raise KeyboardInterrupt
 
             print("")

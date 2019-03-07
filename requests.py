@@ -13,12 +13,10 @@ class ClientRequest:
     """
 
     def __init__(self, method: Operation, params: Dict):
-
-        self.method: Operation = method    # The method (CREATE, READ, or UPDATE) specified by the client
+        self.method: Operation = method  # The method (CREATE, READ, or UPDATE) specified by the client
         self.params: Dict = params  # The params required to execute the request
 
     def __str__(self):
-
         return str({
             "method": str(self.method),
             "params": self.params
@@ -54,14 +52,12 @@ class FrontendRequest:
     Represents a request from a FE to a RM.
     """
 
-    def __init__(self, prev: Timestamp, request: ClientRequest, id: str=None):
-
+    def __init__(self, prev: Timestamp, request: ClientRequest, id: str = None):
         self.id = id if id is not None else str(uuid.uuid4())
         self.prev = prev
         self.request = request
 
     def __str__(self):
-
         dict = self.to_dict()
         del dict["__class__"]
 
@@ -100,12 +96,10 @@ class ReplicaResponse:
     """
 
     def __init__(self, value: Any, label: Timestamp):
-
         self.value = value  # The value of the executed request. None if an update.
         self.label = label  # The value Timestamp of the RM that executed the request
 
     def __str__(self):
-
         dict = self.to_dict()
         del dict["__class__"]
 
@@ -144,4 +138,3 @@ SerializerBase.register_dict_to_class("FrontendRequest", FrontendRequest.from_di
 
 SerializerBase.register_class_to_dict(ReplicaResponse, ReplicaResponse.to_dict)
 SerializerBase.register_dict_to_class("ReplicaResponse", ReplicaResponse.from_dict)
-

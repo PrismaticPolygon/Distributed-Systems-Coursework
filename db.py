@@ -1,22 +1,21 @@
 import sqlite3
 import time
+from typing import Any
 
 from enums import Operation
 from requests import ClientRequest
-from typing import Any
 
 
 class DB:
-
     def __init__(self):
 
         self.path = "./database/data.sqlite"
 
-        connection = sqlite3.connect(self.path)    # Load the database on file
+        connection = sqlite3.connect(self.path)  # Load the database on file
         script = "".join(connection.iterdump())  # Convert it into a script
 
         self.connection = sqlite3.connect(":memory:", check_same_thread=False)  # Connect to an in-memory DB
-        self.connection.executescript(script)   # Load the file database into it
+        self.connection.executescript(script)  # Load the file database into it
 
     def execute_request(self, request: ClientRequest) -> Any:
 
@@ -117,16 +116,6 @@ class DB:
 
         return result[0] + " (" + movie_id + ")"
 
-    # def genres(self, movie_id: str) -> Any:
-    #
-    #     cursor = self.connection.cursor()
-    #
-    #     cursor.execute("SELECT genres FROM movies WHERE (movieId=?)", (movie_id,))
-    #
-    #     result = cursor.fetchone()
-    #
-    #     return result[0]
-
     def all(self, user_id: str) -> Any:
 
         cursor = self.connection.cursor()
@@ -136,4 +125,3 @@ class DB:
         result = cursor.fetchall()
 
         return [self.title(rating[0]) + ": " + str(rating) for rating in result]
-
