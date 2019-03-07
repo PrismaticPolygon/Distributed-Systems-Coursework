@@ -86,11 +86,15 @@ class Frontend(object):
 
                     response: ReplicaResponse = replica.query(frontend_request)  # Query the replica
 
+                    responses.append(response)  # Add the response to those received
+
+                    break
+
                 else:
 
                     response: ReplicaResponse = replica.update(frontend_request)  # Update the replica
 
-                responses.append(response)  # Add the response to those received
+                    responses.append(response)  # Add the response to those received
 
         value = None
 
