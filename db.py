@@ -82,7 +82,7 @@ class DB:
 
         self.connection.commit()
 
-        return "Rating for " + self.title(movie_id) + "(" + movie_id + ") updated: " + str(rating)
+        return "Rating for " + self.title(movie_id) + " updated: " + str(rating)
 
     def delete(self, movie_id: str, user_id: str) -> str:
 
@@ -124,4 +124,4 @@ class DB:
 
         result = cursor.fetchall()
 
-        return [self.title(rating[0]) + ": " + str(rating) for rating in result]
+        return [self.title(rating[0]) + ": " + str(rating[1]) for rating in result]

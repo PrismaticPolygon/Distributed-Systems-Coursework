@@ -92,17 +92,20 @@ class Frontend(object):
 
                 responses.append(response)  # Add the response to those received
 
-                self.prev.merge(response.label)  # Merge this FE's timestamp with the timestamp received
+        value = None
 
-                print("New timestamp  {0}".format(self.prev))
+        for response in responses:
 
-        if len(responses) > 0:
+            self.prev.merge(response.label)  # Merge this FE's timestamp with the timestamp received
 
-            return responses[0].value  # Return a response
+            if response.value is not None:
 
-        else:
+                value = response.value   # Return the response of the first RM to execute the request
 
-            return None  # Something's gone wrong
+        print("\nNew timestamp  {0}".format(self.prev))
+        print("Returning '{0}'".format(value))
+
+        return value  # Something's going wrong
 
 
 if __name__ == '__main__':

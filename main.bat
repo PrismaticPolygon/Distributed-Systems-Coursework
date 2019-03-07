@@ -20,14 +20,13 @@ IF NOT "%3"=="" (
 
 )
 
-start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m Pyro4.naming"
+start cmd.exe /k "python -m Pyro4.naming"
 FOR /L %%i IN (1,1,%num_frontends%) DO (
-    start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m frontend"
+    start cmd.exe /k "python -m frontend"
 )
 cls
 FOR /L %%i IN (1,1,%num_replicas%) DO (
-    start cmd.exe /k "cd./venv/Scripts&&activate&&cd ..\..&&python -m replica"
+    start cmd.exe /k "python -m replica"
 )
 cls
-cd./venv/Scripts&&activate&&cd ..\..&&python -m client %3
-cls
+python -m client %3

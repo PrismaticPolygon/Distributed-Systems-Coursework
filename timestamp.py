@@ -65,11 +65,11 @@ class Timestamp:
                 if value > 0:
                     return True
 
-            elif value < self.replicas[id]:
+            elif value > self.replicas[id]:
 
-                return False
+                return True
 
-            return True
+            return False
 
         return map(lambda entry: entry[0], filter(filter_replica, other.replicas.items()))
 

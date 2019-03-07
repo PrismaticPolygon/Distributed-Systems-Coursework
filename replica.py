@@ -98,13 +98,16 @@ class Replica(object):
         id: str = update.id
         prev: Timestamp = update.prev  # The previous timestamp
         request: ClientRequest = update.request  # The request passed to the FE
-        result = None
 
         if id not in self.executed_operation_table:  # Update has not already been applied
 
             if id not in self._update_log:  # Update has not been seen before
 
-                self._replica_timestamp.replicas[self.id] += 1  # This RM has accepted an update from itself
+                self._replica_timestamp.replicas[self.id] += 1  # This RM has accepted an update
+
+                if (prev <= self.value_timestamp) is False:  # If we're missing information, gossip
+
+                    self.gossip(prev)
 
                 ts = prev.copy()
                 ts.replicas[self.id] = self._replica_timestamp.replicas[self.id]  # Update the timestamp to reflect this
@@ -112,13 +115,7 @@ class Replica(object):
                 record = Record(self.id, ts, request, prev, id)  # Create a record of this update
                 self._update_log += record  # Add it to the log
 
-                if (record.prev <= self.value_timestamp) is False:  # If we're missing information, gossip
-
-                    self.gossip(record.prev)
-
-                else:  # Otherwise, apply the update
-
-                    result = self.apply_update(record)
+                result = self.apply_update(record)
 
                 return ReplicaResponse(result, ts)
 
@@ -160,8 +157,9 @@ class Replica(object):
         print("New replica timestamp", self._replica_timestamp)
 
         stable: List[Record] = self._update_log.stable(self._replica_timestamp)  # Get stable records
+        applied_updates = 0
 
-        print("{} updates now stable\n".format(len(stable)))
+        print()
 
         for record in stable:  # Iterate through stable records
 
@@ -170,6 +168,10 @@ class Replica(object):
                 self.apply_update(record)  # Apply the update
 
                 self.timestamp_table[id] = ts  # Update the timestamp table
+
+                applied_updates += 1
+
+        print("Applied {} stable update(s)\n".format(applied_updates))
 
     def gossip(self, prev: Timestamp) -> None:
         """

@@ -138,7 +138,7 @@ class Client:
 
             params["movie_id"] = input("Please enter a movie ID: ").strip()
 
-        elif operation in [Operation.CREATE, Operation.UPDATE]:
+        if operation in [Operation.CREATE, Operation.UPDATE]:
 
             params["rating"] = self.get_rating()
 
@@ -175,7 +175,7 @@ class Client:
 
                 print("Error:", e)
 
-        print("\n")
+        print()
 
 
 if __name__ == "__main__":

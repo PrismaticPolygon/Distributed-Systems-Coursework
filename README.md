@@ -2,12 +2,13 @@
 
 This is my submission for the Distributed Systems coursework of the Networks and Systems module at Durham University, 2019.
 
-The requested distributed system diagram, explaining how the system functions, can be found at `documents/diagram.pdf`.
+The distributed system diagram, explaining how the system functions, can be found at `documents/diagram.pdf`.
 
-## venv
+## Packages
 
-In order to ensure consistency, the virtual environment `venv` used in development has been packaged in this repository. 
-To run Python, `venv` must be activated using `cd ./venv/Scripts && activate`. 
+This project requires `Pyro4` to run. It may be installed using the instructions found [here](https://pythonhosted.org/Pyro4/install.html).
+The project may also required `msgpacker`, which can be installed using `python -m pip install msgpacker`. 
+
 
 ## Running
 
@@ -21,9 +22,9 @@ original terminal window serves as the client. By entering commands as the clien
 
 #### If main.bat doesn't work
 
-Activate `venv` and run `python -m Pyro4.naming` to launch the Pyro Name Server, `python -m frontend` to 
+Run `python -m Pyro4.naming` to launch the Pyro Name Server, `python -m frontend` to 
 launch a frontend, `python -m replica` to launch a replica, and `python -m client` to launch the client. These must be 
-in separate terminal windows.
+in separate terminal windows. The Pyro Name Server must be running before any DS components can be launched. 
 
 ## Notes
 
