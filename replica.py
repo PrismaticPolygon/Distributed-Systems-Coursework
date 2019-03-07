@@ -11,6 +11,7 @@ from requests import ClientRequest, FrontendRequest, ReplicaResponse
 from timestamp import Timestamp
 
 
+@Pyro4.expose
 class Replica(object):
 
     # Accessor methods for properties of this RM; used for gossip

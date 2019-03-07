@@ -104,6 +104,28 @@ class Client:
 
                 print("Invalid operation entered\n")
 
+    def get_rating(self) -> int:
+
+        while True:
+
+            rating_input = input("Please enter a rating (1 - 5): ").strip()
+
+            try:
+
+                i = int(rating_input)    # Cast the input to an int
+
+                if 1 <= i <= 5:
+
+                    return i    # Return the rating
+
+                else:
+
+                    raise ValueError    # Raise an error if the user has entered an invalid rating
+
+            except ValueError:
+
+                print("Invalid rating entered\n")
+
     def build_request(self) -> ClientRequest:
         """
         Build a ClientRequest, adding and removing parameters as necessary.
@@ -120,7 +142,7 @@ class Client:
 
         elif operation in [Operation.CREATE, Operation.UPDATE]:
 
-            params["rating"] = input("Please enter a rating: ").strip()
+            params["rating"] = self.get_rating()
 
         elif operation is Operation.AVERAGE:
 
