@@ -78,7 +78,8 @@ class DB:
 
         cursor = self.connection.cursor()
 
-        cursor.execute("UPDATE ratings SET rating=? WHERE (movieId=? AND userId=?)", (rating, movie_id, user_id,))
+        cursor.execute("UPDATE ratings SET rating=?, timestamp=? WHERE (movieId=? AND userId=?)", (rating, time.time(),
+                                                                                                   movie_id, user_id,))
 
         self.connection.commit()
 

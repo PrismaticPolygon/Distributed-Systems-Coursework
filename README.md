@@ -11,8 +11,8 @@ The distributed system diagram, showing major workflows among servers, a client,
 #### Packages and version
 
 This project requires `Pyro4` to run. It may be installed using the instructions found [here](https://pythonhosted.org/Pyro4/install.html).
-The project may also require `msgpacker`, which can be installed using `python -m pip install msgpacker`. The system was
-tested using Python `3.6.3`.
+The project may also require `msgpacker`, which can be installed using `python -m pip install msgpacker`. The project was
+tested using Python `3.6.3`, on a Windows system.
 
 #### main.bat
 
@@ -28,7 +28,18 @@ original terminal window serves as the client. By entering commands as the clien
 
 Run `python -m Pyro4.naming` to launch the Pyro Name Server, `python -m frontend` to 
 launch a frontend, `python -m replica` to launch a replica, and `python -m client` to launch the client. These must be 
-in separate terminal windows. The Pyro Name Server must be running before any DS components can be launched. 
+in separate terminal windows, and the Pyro Name Server must be running before any other DS components can be launched.
+
+## Functionality
+
+There are 6 commands available. These are listed by the client:
+
+1. Get average rating. QUERY. Returns the average rating of the movie `(movieID)`.
+2. Create user rating. UPDATE. Inserts a new rating `(userID, movieID, rating)`.
+3. Get user rating. QUERY. Returns this user's rating of the movie with the inputted `movieID`.
+4. Update user rating. UPDATE. Updates an existing user rating `(userID, movieID, rating)`.
+5. Delete user rating. UPDATE. Deletes an existing user rating `(userID, movieID)`.
+6. Get all user ratings. QUERY. Returns all ratings that this user has made `(userID)`
 
 ## Notes
 
